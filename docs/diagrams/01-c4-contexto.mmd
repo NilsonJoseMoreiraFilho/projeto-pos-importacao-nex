@@ -1,0 +1,20 @@
+flowchart LR
+    %% C4 Nivel 1 - Contexto
+    %% Mostra pessoas e sistemas; formatos de documento aparecem nas relacoes.
+
+    fornecedor["Pessoa/Organizacao Externa\nFornecedor de maquiagem"]
+    operadora["Pessoa\nDona/operadora da loja"]
+    sistema["Sistema em desenvolvimento\nSolucao de Importacao de Compras"]
+    nex["Sistema Externo\nNEX - PDV/Estoque/Gestao"]
+
+    fornecedor -->|"envia foto, pedido, PDF, planilha\nou XML real de NF-e se existir"| operadora
+    operadora -->|"faz upload do documento\ne revisa dados extraidos"| sistema
+    sistema -->|"gera compra aprovada ou arquivo intermediario;\nintegracao direta depende de confirmacao"| nex
+    nex -->|"atualiza estoque/custos\nquando integracao for confirmada"| operadora
+
+    classDef person fill:#fff7ed,stroke:#f97316,color:#111827;
+    classDef system fill:#dbeafe,stroke:#2563eb,color:#111827;
+    classDef external fill:#f4f4f5,stroke:#71717a,color:#111827;
+    class fornecedor,operadora person;
+    class sistema system;
+    class nex external;

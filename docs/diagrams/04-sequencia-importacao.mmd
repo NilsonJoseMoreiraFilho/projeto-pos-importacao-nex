@@ -1,0 +1,59 @@
+sequenceDiagram
+    title Fluxo dinamico - Fatia vertical da Sprint 1 e extensao futura
+
+    actor Operadora as Dona/operadora da loja
+    participant CLI as CLI/Test Harness
+    participant UI as Frontend React
+    participant API as HTTP API
+    participant ImportUC as ImportPurchaseProposalUseCase
+    participant ReviewUC as ReviewImportProposalUseCase
+    participant ApproveUC as ApprovePurchaseUseCase
+    participant Reader as DocumentReaderPort
+    participant Normalizer as PurchaseNormalizer
+    participant Validator as PurchaseValidator
+    participant Repo as PurchaseRepositoryPort
+    participant ExportUC as ExportApprovedPurchaseUseCase
+    participant Exporter as ManagementSystemExporterPort
+    participant NEX as NEX
+
+    rect rgb(232, 245, 233)
+        Note over CLI,Exporter: Sprint 1 - fatia vertical demonstravel
+        CLI->>ImportUC: importar JSON controlado baseado na foto/pedido
+        ImportUC->>Reader: ler documento de entrada controlado
+        Reader-->>ImportUC: RawDocumentExtraction
+        ImportUC->>Normalizer: normalizar dados extraidos
+        Normalizer-->>ImportUC: Purchase draft / ImportProposal
+        ImportUC->>Validator: validar fornecedor, paginas, itens e totais
+        Validator-->>ImportUC: ValidationResult[]
+        ImportUC->>Repo: salvar proposta e validacoes
+        ImportUC-->>CLI: proposta com status NEEDS_REVIEW ou PROPOSED
+        CLI->>ExportUC: gerar saida demonstrativa
+        ExportUC->>Repo: buscar proposta aprovada/simulada
+        ExportUC->>Exporter: exportar JSON/CSV
+        Exporter-->>ExportUC: ExportResult
+        ExportUC-->>CLI: caminho do arquivo gerado
+    end
+
+    rect rgb(239, 246, 255)
+        Note over Operadora,NEX: Sprints 2/3 - fluxo alvo com interface e integracao real
+        Operadora->>UI: envia foto, pedido, PDF ou planilha
+        UI->>API: POST /purchase-imports
+        API->>ImportUC: importar documento
+        ImportUC->>Reader: ler via OCR/PDF/XLSX/XML real se existir
+        Reader-->>ImportUC: RawDocumentExtraction
+        ImportUC-->>API: ImportProposal
+        API-->>UI: exibir proposta para revisao humana
+        Operadora->>UI: corrige e aprova campos
+        UI->>API: enviar decisoes de revisao
+        API->>ReviewUC: aplicar decisoes humanas
+        ReviewUC-->>API: proposta revisada
+        API->>ApproveUC: aprovar compra revisada
+        ApproveUC-->>API: ApprovedPurchase
+        API->>ExportUC: exportar compra aprovada
+        alt API ou planilha oficial confirmada
+            ExportUC->>Exporter: enviar para adaptador NEX
+            Exporter->>NEX: API/planilha conforme viabilidade
+        else sem integracao confirmada
+            ExportUC->>Exporter: gerar CSV/JSON intermediario
+        end
+    end

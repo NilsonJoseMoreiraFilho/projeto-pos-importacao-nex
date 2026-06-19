@@ -1,0 +1,113 @@
+flowchart LR
+    %% Diagrama interno do Backend Go - Arquitetura Hexagonal
+    %% Nao e C4. Mostra adapters, portas, casos de uso, dominio e infraestrutura.
+    %% Setas solidas = chamada/dependencia em tempo de execucao.
+    %% Setas pontilhadas = componente implementa uma porta definida no nucleo.
+
+    subgraph driving["Driving adapters / entrada"]
+        http["HTTP API"]
+        cli["CLI/Test Harness"]
+    end
+
+    subgraph core["Nucleo da aplicacao"]
+        subgraph inbound["Portas driving / entrada"]
+            importPort["ImportPurchaseProposalPort"]
+            reviewPort["ReviewImportProposalPort"]
+            approvePort["ApprovePurchasePort"]
+            exportPort["ExportApprovedPurchasePort"]
+        end
+
+        subgraph app["Aplicacao / casos de uso"]
+            importUseCase["ImportPurchaseProposalUseCase"]
+            reviewUseCase["ReviewImportProposalUseCase"]
+            approveUseCase["ApprovePurchaseUseCase"]
+            exportUseCase["ExportApprovedPurchaseUseCase"]
+            mapper["PurchaseProposalMapper"]
+            importValidator["ImportProposalValidator"]
+        end
+
+        subgraph domain["Dominio"]
+            entities["Entidades e Value Objects: Supplier, Purchase, PurchaseItem, PurchaseTotals, ApprovedPurchase"]
+            rules["Regras de negocio e invariantes"]
+            approvalPolicy["PurchaseApprovalPolicy"]
+        end
+
+        subgraph outbound["Portas driven / saida"]
+            documentReader["DocumentReaderPort"]
+            repository["PurchaseRepositoryPort"]
+            catalog["ProductCatalogPort"]
+            exporter["ManagementSystemExporterPort"]
+        end
+    end
+
+    subgraph driven["Driven adapters / infraestrutura"]
+        manualJson["ManualJsonDocumentReaderAdapter"]
+        imageOcr["ImageOcrDocumentReaderAdapter"]
+        xlsx["XlsxDocumentReaderAdapter"]
+        pdf["PdfDocumentReaderAdapter"]
+        nfeXml["NfeXmlReaderAdapter"]
+        persistence["DatabaseFileRepositoryAdapter"]
+        productCatalog["ProductCatalogAdapter"]
+        csv["CsvJsonExporterAdapter"]
+        nexSpreadsheet["NexSpreadsheetExporterAdapter"]
+        nexApi["NexApiExporterAdapter"]
+        nexRpa["NexRpaExporterAdapter"]
+    end
+
+    http --> importPort
+    http --> reviewPort
+    http --> approvePort
+    http --> exportPort
+    cli --> importPort
+    cli --> exportPort
+
+    importPort --> importUseCase
+    reviewPort --> reviewUseCase
+    approvePort --> approveUseCase
+    exportPort --> exportUseCase
+
+    importUseCase --> documentReader
+    importUseCase --> mapper
+    importUseCase --> importValidator
+    importUseCase --> repository
+    importUseCase --> catalog
+    reviewUseCase --> repository
+    approveUseCase --> repository
+    approveUseCase --> approvalPolicy
+    exportUseCase --> repository
+    exportUseCase --> exporter
+
+    mapper --> entities
+    importValidator --> rules
+    approvalPolicy --> entities
+    rules --> entities
+
+    importUseCase -. implementa .-> importPort
+    reviewUseCase -. implementa .-> reviewPort
+    approveUseCase -. implementa .-> approvePort
+    exportUseCase -. implementa .-> exportPort
+
+    manualJson -. implementa .-> documentReader
+    imageOcr -. implementa .-> documentReader
+    xlsx -. implementa .-> documentReader
+    pdf -. implementa .-> documentReader
+    nfeXml -. implementa .-> documentReader
+    persistence -. implementa .-> repository
+    productCatalog -. implementa .-> catalog
+    csv -. implementa .-> exporter
+    nexSpreadsheet -. implementa .-> exporter
+    nexApi -. implementa .-> exporter
+    nexRpa -. implementa .-> exporter
+
+    classDef driving fill:#fff7ed,stroke:#f97316,color:#111827;
+    classDef portStyle fill:#ede9fe,stroke:#7c3aed,color:#111827;
+    classDef appStyle fill:#dbeafe,stroke:#2563eb,color:#111827;
+    classDef domainStyle fill:#fef9c3,stroke:#ca8a04,color:#111827;
+    classDef drivenStyle fill:#dcfce7,stroke:#16a34a,color:#111827;
+    classDef future fill:#f8fafc,stroke:#94a3b8,color:#475569,stroke-dasharray: 5 5;
+    class http,cli driving;
+    class importPort,reviewPort,approvePort,exportPort,documentReader,repository,catalog,exporter portStyle;
+    class importUseCase,reviewUseCase,approveUseCase,exportUseCase,mapper,importValidator appStyle;
+    class entities,rules,approvalPolicy domainStyle;
+    class manualJson,persistence,csv drivenStyle;
+    class imageOcr,xlsx,pdf,nfeXml,productCatalog,nexSpreadsheet,nexApi,nexRpa future;

@@ -1,0 +1,6 @@
+.codex-remote-attachments/
+artifacts/
+*.tmp
+*.log
+backend/bin/
+backend/coverage.out

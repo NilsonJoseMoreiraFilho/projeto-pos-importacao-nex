@@ -1,0 +1,30 @@
+flowchart TB
+    %% C4 Nivel 2 - Containers
+    %% Mantem apenas unidades executaveis/implantaveis e armazenamento.
+    %% Adaptadores e portas aparecem no diagrama hexagonal do backend.
+
+    operadora["Pessoa\nDona/operadora da loja"]
+    nex["Sistema Externo\nNEX - PDV/Estoque"]
+
+    subgraph solucao["Sistema: Solucao de Importacao de Compras"]
+        frontend["Container\nFrontend React SPA\nUpload, conferencia e revisao"]
+        backend["Container\nBackend Go API\nCasos de uso, dominio e portas"]
+        storage["Container\nBanco/Storage de Importacoes\nDocumentos, propostas, revisoes e logs"]
+        worker["Container opcional\nWorker de Extracao/OCR\nProcessamento assincrono futuro"]
+    end
+
+    operadora -->|"usa no navegador"| frontend
+    frontend -->|"HTTPS/JSON\nupload e revisao"| backend
+    backend -->|"salva e consulta"| storage
+    backend -.->|"aciona quando houver OCR assincrono"| worker
+    worker -.->|"retorna extracao estruturada"| backend
+    backend -->|"JSON/CSV demonstrativo;\nAPI/planilha/RPA se confirmado"| nex
+
+    classDef person fill:#fff7ed,stroke:#f97316,color:#111827;
+    classDef container fill:#dbeafe,stroke:#2563eb,color:#111827;
+    classDef optional fill:#eef2ff,stroke:#6366f1,color:#111827,stroke-dasharray: 5 5;
+    classDef external fill:#f4f4f5,stroke:#71717a,color:#111827;
+    class operadora person;
+    class frontend,backend,storage container;
+    class worker optional;
+    class nex external;
