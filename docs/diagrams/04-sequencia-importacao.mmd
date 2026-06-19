@@ -18,8 +18,8 @@ sequenceDiagram
 
     rect rgb(232, 245, 233)
         Note over CLI,Exporter: Sprint 1 - fatia vertical demonstravel
-        CLI->>ImportUC: importar JSON controlado baseado na foto/pedido
-        ImportUC->>Reader: ler documento de entrada controlado
+        CLI->>ImportUC: importar documento por reader configurado
+        ImportUC->>Reader: ler JSON controlado, XLSX, PDF sidecar ou imagem/OCR sidecar
         Reader-->>ImportUC: RawDocumentExtraction
         ImportUC->>Normalizer: normalizar dados extraidos
         Normalizer-->>ImportUC: Purchase draft / ImportProposal
@@ -29,7 +29,7 @@ sequenceDiagram
         ImportUC-->>CLI: proposta com status NEEDS_REVIEW ou PROPOSED
         CLI->>ExportUC: gerar saida demonstrativa
         ExportUC->>Repo: buscar proposta aprovada/simulada
-        ExportUC->>Exporter: exportar JSON/CSV
+        ExportUC->>Exporter: exportar JSON/CSV ou XLSX demonstrativo
         Exporter-->>ExportUC: ExportResult
         ExportUC-->>CLI: caminho do arquivo gerado
     end

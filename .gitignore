@@ -3,4 +3,5 @@ artifacts/
 *.tmp
 *.log
 backend/bin/
+backend/out/
 backend/coverage.out

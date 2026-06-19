@@ -2,4 +2,4 @@ package outbound
 
 import "projeto_pos/backend/internal/application"
 
-type DocumentReaderPort = application.DocumentReader
+type PurchaseRepositoryPort = application.PurchaseRepository
