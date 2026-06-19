@@ -58,6 +58,87 @@ func TestApproveServiceApprovesValidProposal(t *testing.T) {
 	}
 }
 
+func TestReviewServiceCorrectsDraftAndRevalidates(t *testing.T) {
+	repository := newFakeRepository()
+	raw := invalidRawExtraction()
+	raw.ExtractedFields = []ExtractedField{
+		{FieldPath: "purchase.supplier.legalName", Status: FieldLowConfidence},
+	}
+	service := NewImportPurchaseServiceWithDependencies(stubReader{raw: raw}, repository, nil)
+	proposal, err := service.Import(context.Background(), ImportPurchaseInput{})
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+
+	reviewed, err := NewReviewImportProposalService(repository).Review(context.Background(), proposal.ID, []ReviewDecision{
+		{
+			FieldPath:      "purchase.supplier.legalName",
+			Decision:       ReviewDecisionCorrect,
+			CorrectedValue: "Fornecedor Corrigido",
+			ReviewedBy:     "tester",
+			ReviewedAt:     time.Now().UTC(),
+		},
+	})
+	if err != nil {
+		t.Fatalf("review failed: %v", err)
+	}
+	if reviewed.PurchaseDraft.Supplier.LegalName != "Fornecedor Corrigido" {
+		t.Fatalf("draft was not corrected: %#v", reviewed.PurchaseDraft.Supplier)
+	}
+	if reviewed.Status != ProposalProposed {
+		t.Fatalf("expected proposal to be proposed after correction, got %s with %#v", reviewed.Status, reviewed.ValidationResults)
+	}
+}
+
+func TestReviewServiceRejectedFieldBlocksApproval(t *testing.T) {
+	repository := newFakeRepository()
+	raw := validRawExtraction()
+	raw.ExtractedFields = []ExtractedField{
+		{FieldPath: "purchase.documentNumber", Status: FieldLowConfidence},
+	}
+	service := NewImportPurchaseServiceWithDependencies(stubReader{raw: raw}, repository, nil)
+	proposal, err := service.Import(context.Background(), ImportPurchaseInput{})
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+
+	reviewed, err := NewReviewImportProposalService(repository).Review(context.Background(), proposal.ID, []ReviewDecision{
+		{
+			FieldPath:  "purchase.documentNumber",
+			Decision:   ReviewDecisionReject,
+			ReviewedBy: "tester",
+			ReviewedAt: time.Now().UTC(),
+		},
+	})
+	if err != nil {
+		t.Fatalf("review failed: %v", err)
+	}
+	if reviewed.Status != ProposalNeedsReview {
+		t.Fatalf("expected rejected field to keep review needed, got %s", reviewed.Status)
+	}
+	_, err = NewApprovePurchaseService(repository).Approve(context.Background(), proposal.ID, "tester")
+	if err == nil {
+		t.Fatal("expected rejected field to block approval")
+	}
+}
+
+func TestImportServiceGeneratesUniqueIDs(t *testing.T) {
+	repository := newFakeRepository()
+	service := NewImportPurchaseServiceWithDependencies(stubReader{raw: validRawExtraction()}, repository, nil)
+
+	first, err := service.Import(context.Background(), ImportPurchaseInput{})
+	if err != nil {
+		t.Fatalf("first import failed: %v", err)
+	}
+	second, err := service.Import(context.Background(), ImportPurchaseInput{})
+	if err != nil {
+		t.Fatalf("second import failed: %v", err)
+	}
+	if first.ID == second.ID {
+		t.Fatalf("expected unique IDs, got %s", first.ID)
+	}
+}
+
 type stubReader struct {
 	raw RawDocumentExtraction
 }

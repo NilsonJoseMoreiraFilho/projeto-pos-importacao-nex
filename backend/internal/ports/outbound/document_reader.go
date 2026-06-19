@@ -1,11 +1,5 @@
 package outbound
 
-import (
-	"context"
+import "projeto_pos/backend/internal/application"
 
-	"projeto_pos/backend/internal/application"
-)
-
-type DocumentReaderPort interface {
-	Read(ctx context.Context, path string) (application.RawDocumentExtraction, error)
-}
+type DocumentReaderPort = application.DocumentReader

@@ -71,6 +71,22 @@ func (r Reader) Read(_ context.Context, path string) (application.RawDocumentExt
 		if isBlank(row) {
 			continue
 		}
+		packageQuantity, err := parseInt(cell(row, header, "package_quantity"))
+		if err != nil && cell(row, header, "package_quantity") != "" {
+			return application.RawDocumentExtraction{}, fmt.Errorf("invalid package_quantity on row %d: %w", i+2, err)
+		}
+		quantity, err := parseDecimal(cell(row, header, "quantity"))
+		if err != nil {
+			return application.RawDocumentExtraction{}, fmt.Errorf("invalid quantity on row %d: %w", i+2, err)
+		}
+		unitCost, err := parseMoney(cell(row, header, "unit_cost"))
+		if err != nil {
+			return application.RawDocumentExtraction{}, fmt.Errorf("invalid unit_cost on row %d: %w", i+2, err)
+		}
+		totalCost, err := parseMoney(cell(row, header, "total_cost"))
+		if err != nil {
+			return application.RawDocumentExtraction{}, fmt.Errorf("invalid total_cost on row %d: %w", i+2, err)
+		}
 		item := domain.PurchaseItem{
 			LineNumber:               i + 1,
 			SupplierProductCode:      cell(row, header, "supplier_product_code"),
@@ -78,10 +94,10 @@ func (r Reader) Read(_ context.Context, path string) (application.RawDocumentExt
 			Reference:                cell(row, header, "reference"),
 			Description:              cell(row, header, "description"),
 			Unit:                     cell(row, header, "unit"),
-			PackageQuantity:          parseInt(cell(row, header, "package_quantity")),
-			Quantity:                 parseFloat(cell(row, header, "quantity")),
-			UnitCost:                 domain.NewMoneyFromFloat(parseFloat(cell(row, header, "unit_cost"))),
-			TotalCost:                domain.NewMoneyFromFloat(parseFloat(cell(row, header, "total_cost"))),
+			PackageQuantity:          packageQuantity,
+			Quantity:                 quantity,
+			UnitCost:                 unitCost,
+			TotalCost:                totalCost,
 			MatchedInternalProductID: cell(row, header, "matched_internal_product_id"),
 		}
 		if item.PackageQuantity == 0 {
@@ -91,15 +107,11 @@ func (r Reader) Read(_ context.Context, path string) (application.RawDocumentExt
 		productsTotal = productsTotal.Add(item.TotalCost)
 	}
 
-	purchase.Totals = domain.PurchaseTotals{
-		ProductsTotal:   moneyOrDefault(cell(rows[1], header, "products_total"), productsTotal),
-		Discount:        domain.NewMoneyFromFloat(parseFloat(cell(rows[1], header, "discount"))),
-		Addition:        domain.NewMoneyFromFloat(parseFloat(cell(rows[1], header, "addition"))),
-		IPI:             domain.NewMoneyFromFloat(parseFloat(cell(rows[1], header, "ipi"))),
-		TaxSubstitution: domain.NewMoneyFromFloat(parseFloat(cell(rows[1], header, "tax_substitution"))),
-		FCPST:           domain.NewMoneyFromFloat(parseFloat(cell(rows[1], header, "fcp_st"))),
-		GrandTotal:      moneyOrDefault(cell(rows[1], header, "grand_total"), productsTotal),
+	totals, err := parseTotals(rows[1], header, productsTotal)
+	if err != nil {
+		return application.RawDocumentExtraction{}, err
 	}
+	purchase.Totals = totals
 
 	return application.RawDocumentExtraction{
 		SourceDocument: domain.SourceDocument{
@@ -137,22 +149,86 @@ func cell(row []string, header map[string]int, name string) string {
 	return strings.TrimSpace(row[i])
 }
 
-func parseFloat(value string) float64 {
-	value = strings.ReplaceAll(strings.TrimSpace(value), ",", ".")
-	parsed, _ := strconv.ParseFloat(value, 64)
-	return parsed
-}
-
-func parseInt(value string) int {
-	parsed, _ := strconv.Atoi(strings.TrimSpace(value))
-	return parsed
-}
-
-func moneyOrDefault(value string, fallback domain.Money) domain.Money {
-	if strings.TrimSpace(value) == "" {
-		return fallback
+func parseDecimal(value string) (float64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, nil
 	}
-	return domain.NewMoneyFromFloat(parseFloat(value))
+	value = normalizeDecimal(value)
+	return strconv.ParseFloat(value, 64)
+}
+
+func parseInt(value string) (int, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, nil
+	}
+	return strconv.Atoi(value)
+}
+
+func parseMoney(value string) (domain.Money, error) {
+	parsed, err := parseDecimal(value)
+	if err != nil {
+		return domain.Money{}, err
+	}
+	return domain.NewMoneyFromFloat(parsed), nil
+}
+
+func moneyOrDefault(value string, fallback domain.Money) (domain.Money, error) {
+	if strings.TrimSpace(value) == "" {
+		return fallback, nil
+	}
+	return parseMoney(value)
+}
+
+func parseTotals(row []string, header map[string]int, productsTotal domain.Money) (domain.PurchaseTotals, error) {
+	parsedProductsTotal, err := moneyOrDefault(cell(row, header, "products_total"), productsTotal)
+	if err != nil {
+		return domain.PurchaseTotals{}, fmt.Errorf("invalid products_total: %w", err)
+	}
+	grandTotal, err := moneyOrDefault(cell(row, header, "grand_total"), productsTotal)
+	if err != nil {
+		return domain.PurchaseTotals{}, fmt.Errorf("invalid grand_total: %w", err)
+	}
+	discount, err := parseMoney(cell(row, header, "discount"))
+	if err != nil {
+		return domain.PurchaseTotals{}, fmt.Errorf("invalid discount: %w", err)
+	}
+	addition, err := parseMoney(cell(row, header, "addition"))
+	if err != nil {
+		return domain.PurchaseTotals{}, fmt.Errorf("invalid addition: %w", err)
+	}
+	ipi, err := parseMoney(cell(row, header, "ipi"))
+	if err != nil {
+		return domain.PurchaseTotals{}, fmt.Errorf("invalid ipi: %w", err)
+	}
+	taxSubstitution, err := parseMoney(cell(row, header, "tax_substitution"))
+	if err != nil {
+		return domain.PurchaseTotals{}, fmt.Errorf("invalid tax_substitution: %w", err)
+	}
+	fcpST, err := parseMoney(cell(row, header, "fcp_st"))
+	if err != nil {
+		return domain.PurchaseTotals{}, fmt.Errorf("invalid fcp_st: %w", err)
+	}
+	return domain.PurchaseTotals{
+		ProductsTotal:   parsedProductsTotal,
+		Discount:        discount,
+		Addition:        addition,
+		IPI:             ipi,
+		TaxSubstitution: taxSubstitution,
+		FCPST:           fcpST,
+		GrandTotal:      grandTotal,
+	}, nil
+}
+
+func normalizeDecimal(value string) string {
+	value = strings.ReplaceAll(value, " ", "")
+	value = strings.ReplaceAll(value, "R$", "")
+	if strings.Contains(value, ",") {
+		value = strings.ReplaceAll(value, ".", "")
+		value = strings.ReplaceAll(value, ",", ".")
+	}
+	return value
 }
 
 func isBlank(row []string) bool {

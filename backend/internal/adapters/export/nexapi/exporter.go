@@ -19,7 +19,7 @@ type Exporter struct {
 }
 
 func NewExporter(endpoint string, token string) Exporter {
-	return Exporter{Endpoint: endpoint, Token: token, HTTPClient: http.DefaultClient}
+	return Exporter{Endpoint: endpoint, Token: token, HTTPClient: &http.Client{Timeout: 30 * time.Second}}
 }
 
 func (e Exporter) ExportApprovedPurchase(ctx context.Context, purchase domain.ApprovedPurchase) (application.ExportResult, error) {
@@ -41,7 +41,7 @@ func (e Exporter) ExportApprovedPurchase(ctx context.Context, purchase domain.Ap
 
 	client := e.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: 30 * time.Second}
 	}
 	resp, err := client.Do(req)
 	if err != nil {

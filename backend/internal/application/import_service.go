@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -76,7 +78,7 @@ func (s ImportPurchaseService) Import(ctx context.Context, input ImportPurchaseI
 	}
 
 	proposal := ImportProposal{
-		ID:                fmt.Sprintf("proposal-%d", time.Now().Unix()),
+		ID:                newProposalID(),
 		SourceDocument:    raw.SourceDocument,
 		ExtractedFields:   raw.ExtractedFields,
 		PurchaseDraft:     raw.Purchase,
@@ -92,6 +94,14 @@ func (s ImportPurchaseService) Import(ctx context.Context, input ImportPurchaseI
 	}
 
 	return proposal, nil
+}
+
+func newProposalID() string {
+	var bytes [8]byte
+	if _, err := rand.Read(bytes[:]); err != nil {
+		return fmt.Sprintf("proposal-%d", time.Now().UnixNano())
+	}
+	return "proposal-" + hex.EncodeToString(bytes[:])
 }
 
 type ReviewImportProposalService struct {
@@ -121,10 +131,19 @@ func (s ReviewImportProposalService) Review(ctx context.Context, proposalID stri
 			case ReviewDecisionCorrect:
 				proposal.ExtractedFields[i].Status = FieldCorrected
 				proposal.ExtractedFields[i].NormalizedValue = decision.CorrectedValue
+				if err := applyCorrectedValue(&proposal.PurchaseDraft, decision.FieldPath, decision.CorrectedValue); err != nil {
+					return ImportProposal{}, err
+				}
 			case ReviewDecisionReject:
 				proposal.ExtractedFields[i].Status = FieldRejected
 			}
 		}
+	}
+	proposal.ValidationResults = domain.ValidatePurchase(proposal.SourceDocument, proposal.PurchaseDraft, false)
+	proposal.ValidationResults = append(proposal.ValidationResults, validateReviewedFields(proposal.ExtractedFields)...)
+	proposal.Status = ProposalProposed
+	if domain.HasBlocking(proposal.ValidationResults) {
+		proposal.Status = ProposalNeedsReview
 	}
 	if err := s.repository.SaveProposal(ctx, proposal); err != nil {
 		return ImportProposal{}, err
@@ -151,6 +170,9 @@ func (s ApprovePurchaseService) Approve(ctx context.Context, proposalID string, 
 	if domain.HasBlocking(proposal.ValidationResults) {
 		return domain.ApprovedPurchase{}, errors.New("proposal has blocking validation results")
 	}
+	if hasRejectedField(proposal.ExtractedFields) {
+		return domain.ApprovedPurchase{}, errors.New("proposal has rejected extracted fields")
+	}
 	approved := domain.ApprovedPurchase{
 		Purchase:   proposal.PurchaseDraft,
 		ApprovedBy: reviewer,
@@ -160,6 +182,45 @@ func (s ApprovePurchaseService) Approve(ctx context.Context, proposalID string, 
 		return domain.ApprovedPurchase{}, err
 	}
 	return approved, nil
+}
+
+func validateReviewedFields(fields []ExtractedField) []domain.ValidationResult {
+	var results []domain.ValidationResult
+	for _, field := range fields {
+		if field.Status == FieldRejected {
+			results = append(results, domain.ValidationResult{
+				Severity: domain.ValidationError,
+				Code:     "FIELD_REJECTED",
+				Field:    field.FieldPath,
+				Message:  "campo extraido foi rejeitado na revisao humana",
+				Blocking: true,
+			})
+		}
+	}
+	return results
+}
+
+func hasRejectedField(fields []ExtractedField) bool {
+	for _, field := range fields {
+		if field.Status == FieldRejected {
+			return true
+		}
+	}
+	return false
+}
+
+func applyCorrectedValue(purchase *domain.Purchase, fieldPath string, value any) error {
+	switch fieldPath {
+	case "purchase.documentNumber":
+		purchase.DocumentNumber = fmt.Sprint(value)
+	case "purchase.supplier.legalName":
+		purchase.Supplier.LegalName = fmt.Sprint(value)
+	case "purchase.supplier.documentNumber":
+		purchase.Supplier.DocumentNumber = fmt.Sprint(value)
+	default:
+		return nil
+	}
+	return nil
 }
 
 type ExportApprovedPurchaseService struct {
