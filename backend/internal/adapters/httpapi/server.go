@@ -16,6 +16,7 @@ import (
 	"projeto_pos/backend/internal/adapters/documentreader/manualjson"
 	pdfreader "projeto_pos/backend/internal/adapters/documentreader/pdf"
 	xlsxreader "projeto_pos/backend/internal/adapters/documentreader/xlsx"
+	"projeto_pos/backend/internal/adapters/export/csvexport"
 	"projeto_pos/backend/internal/adapters/persistence/memory"
 	"projeto_pos/backend/internal/application"
 )
@@ -126,21 +127,21 @@ func (s *Server) handleGetImport(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleReviewImport(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Decisions []application.ReviewDecision `json:"decisions"`
+		Edits []application.ReviewEdit `json:"edits"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	for i := range request.Decisions {
-		if request.Decisions[i].ReviewedAt.IsZero() {
-			request.Decisions[i].ReviewedAt = time.Now().UTC()
+	for i := range request.Edits {
+		if request.Edits[i].EditedAt.IsZero() {
+			request.Edits[i].EditedAt = time.Now().UTC()
 		}
-		if request.Decisions[i].ReviewedBy == "" {
-			request.Decisions[i].ReviewedBy = "operadora"
+		if request.Edits[i].EditedBy == "" {
+			request.Edits[i].EditedBy = "operadora"
 		}
 	}
-	proposal, err := application.NewReviewImportProposalService(s.repository).Review(r.Context(), r.PathValue("id"), request.Decisions)
+	proposal, err := application.NewReviewImportProposalService(s.repository).Review(r.Context(), r.PathValue("id"), request.Edits)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err)
 		return
@@ -161,7 +162,21 @@ func (s *Server) handleApproveImport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, approved)
+	exportPath := filepath.Join(filepath.Dir(s.uploadDir), "exports", fmt.Sprintf("nex-import-%s.csv", sanitizeFileName(r.PathValue("id"))))
+	if err := os.MkdirAll(filepath.Dir(exportPath), 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	exporter := csvexport.NewManagementExporter(exportPath)
+	exportResult, err := application.NewExportApprovedPurchaseService(s.repository, exporter).Export(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"approvedPurchase": approved,
+		"exportResult":     exportResult,
+	})
 }
 
 func SelectReader(name string, input string) (application.DocumentReader, error) {

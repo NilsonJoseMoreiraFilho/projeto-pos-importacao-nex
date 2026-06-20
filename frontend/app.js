@@ -1,4 +1,5 @@
-const { useMemo, useState } = React;
+const { useEffect, useMemo, useState } = React;
+const h = React.createElement;
 
 const api = {
   async createImport({ file, reader, requiresHumanReview }) {
@@ -6,24 +7,25 @@ const api = {
     formData.append("file", file);
     formData.append("reader", reader);
     formData.append("requiresHumanReview", String(requiresHumanReview));
-    const response = await fetch("/api/imports", { method: "POST", body: formData });
-    return readResponse(response);
+    return readResponse(await fetch("/api/imports", { method: "POST", body: formData }));
   },
-  async review(id, decisions) {
-    const response = await fetch(`/api/imports/${id}/review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decisions }),
-    });
-    return readResponse(response);
+  async review(id, edits) {
+    return readResponse(
+      await fetch(`/api/imports/${id}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ edits }),
+      }),
+    );
   },
   async approve(id) {
-    const response = await fetch(`/api/imports/${id}/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reviewer: "operadora" }),
-    });
-    return readResponse(response);
+    return readResponse(
+      await fetch(`/api/imports/${id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewer: "operadora" }),
+      }),
+    );
   },
 };
 
@@ -53,56 +55,41 @@ function App() {
     }
   }
 
-  const blocking = useMemo(
-    () => (proposal?.validationResults || []).filter((item) => item.blocking),
-    [proposal],
-  );
-  const canApprove = proposal && blocking.length === 0 && proposal.status === "PROPOSED";
-
-  return React.createElement(
+  return h(
     "div",
     { className: "app" },
-    React.createElement(
-      "header",
-      { className: "topbar" },
-      React.createElement("h1", null, "Importacao de compras"),
-      React.createElement("p", null, "Sprint 2 - upload, revisao humana e confirmacao"),
-    ),
-    React.createElement(
+    h("header", { className: "topbar" }, h("h1", null, "Importacao de compras NEX"), h("p", null, "Upload, conferencia em tabela e aprovacao na mesma tela")),
+    h(
       "div",
-      { className: "layout" },
-      React.createElement(UploadPanel, {
+      { className: "layout desktop" },
+      h(UploadPanel, {
         busy,
         onUpload: (input) =>
           run(async () => {
             setApproved(null);
-            const next = await api.createImport(input);
-            setProposal(next);
+            setProposal(await api.createImport(input));
           }),
       }),
-      React.createElement(
-        "section",
-        { className: "grid" },
-        error ? React.createElement("div", { className: "error" }, error) : null,
+      h(
+        "main",
+        { className: "workspace" },
+        error ? h("div", { className: "error" }, error) : null,
         proposal
-          ? React.createElement(ProposalReview, {
+          ? h(ReviewWorkspace, {
               proposal,
               approved,
               busy,
-              canApprove,
-              onReview: (decisions) =>
+              onReview: (edits) =>
                 run(async () => {
-                  const next = await api.review(proposal.id, decisions);
-                  setProposal(next);
+                  setProposal(await api.review(proposal.id, edits));
                   setApproved(null);
                 }),
               onApprove: () =>
                 run(async () => {
-                  const next = await api.approve(proposal.id);
-                  setApproved(next);
+                  setApproved(await api.approve(proposal.id));
                 }),
             })
-          : React.createElement("div", { className: "panel empty" }, "Envie um documento para iniciar a revisao."),
+          : h("section", { className: "panel empty-state" }, "Envie um documento para gerar a tabela de revisao."),
       ),
     ),
   );
@@ -113,245 +100,253 @@ function UploadPanel({ busy, onUpload }) {
   const [reader, setReader] = useState("auto");
   const [requiresHumanReview, setRequiresHumanReview] = useState(true);
 
-  return React.createElement(
+  return h(
     "aside",
-    { className: "panel" },
-    React.createElement("h2", null, "Upload do documento"),
-    React.createElement(
+    { className: "panel upload-panel" },
+    h("h2", null, "1. Upload"),
+    h("p", { className: "muted" }, "Documento do fornecedor: XLSX, JSON, PDF ou foto com sidecar OCR."),
+    h(
       "div",
       { className: "field" },
-      React.createElement("label", null, "Arquivo"),
-      React.createElement("input", {
-        type: "file",
-        onChange: (event) => setFile(event.target.files[0] || null),
-      }),
+      h("label", null, "Arquivo"),
+      h("input", { type: "file", onChange: (event) => setFile(event.target.files[0] || null) }),
     ),
-    React.createElement(
+    h(
       "div",
       { className: "field" },
-      React.createElement("label", null, "Reader"),
-      React.createElement(
+      h("label", null, "Reader"),
+      h(
         "select",
         { value: reader, onChange: (event) => setReader(event.target.value) },
-        ["auto", "manualjson", "xlsx", "pdf", "imageocr"].map((item) =>
-          React.createElement("option", { key: item, value: item }, item),
+        ["auto", "manualjson", "xlsx", "pdf", "imageocr"].map((item) => h("option", { key: item, value: item }, item)),
+      ),
+    ),
+    h(
+      "label",
+      { className: "checkbox" },
+      h("input", { type: "checkbox", checked: requiresHumanReview, onChange: (event) => setRequiresHumanReview(event.target.checked) }),
+      h("span", null, "Exigir conferencia humana"),
+    ),
+    h(
+      "button",
+      { className: "button primary full", disabled: busy || !file, onClick: () => onUpload({ file, reader, requiresHumanReview }) },
+      busy ? "Processando..." : "Processar documento",
+    ),
+  );
+}
+
+function ReviewWorkspace({ proposal, approved, busy, onReview, onApprove }) {
+  const [draft, setDraft] = useState(clonePurchase(proposal.purchaseDraft));
+  const blocking = useMemo(() => (proposal.validationResults || []).filter((item) => item.blocking), [proposal]);
+  const canApprove = blocking.length === 0 && proposal.status === "PROPOSED" && !approved;
+
+  useEffect(() => {
+    setDraft(clonePurchase(proposal.purchaseDraft));
+  }, [proposal.id, proposal.purchaseDraft]);
+
+  return h(
+    React.Fragment,
+    null,
+    h(
+      "section",
+      { className: "panel review-shell" },
+      h(
+        "div",
+        { className: "review-header" },
+        h("div", null, h("h2", null, "2. Conferencia em tabela"), h("p", { className: "muted" }, "Edite direto nas celulas. Obrigatorios pendentes ficam em vermelho.")),
+        h("span", { className: `status ${canApprove ? "ok" : "review"}` }, canApprove ? "Pronto para aprovar" : `${blocking.length} pendencia(s)`),
+      ),
+      h(HeaderGrid, { draft, setDraft, results: proposal.validationResults || [] }),
+      h(ItemsGrid, { draft, setDraft, results: proposal.validationResults || [] }),
+      h(
+        "div",
+        { className: "review-actions" },
+        h("button", { className: "button secondary", disabled: busy, onClick: () => onReview(buildEdits(draft)) }, "Salvar alteracoes"),
+        h("button", { className: "button primary", disabled: busy || !canApprove, onClick: onApprove }, "Aprovar e integrar NEX"),
+      ),
+    ),
+    h(ValidationPanel, { results: proposal.validationResults || [] }),
+    approved ? h(ApprovalPanel, { approved }) : null,
+  );
+}
+
+function HeaderGrid({ draft, setDraft, results }) {
+  return h(
+    "div",
+    { className: "sheet header-sheet" },
+    h("div", { className: "sheet-title" }, "Cabecalho da compra"),
+    inputCell("Fornecedor", draft.supplier?.legalName || "", (value) => setDraft(update(draft, ["supplier", "legalName"], value)), invalidSupplier(draft, results)),
+    inputCell("CNPJ/CPF", draft.supplier?.documentNumber || "", (value) => setDraft(update(draft, ["supplier", "documentNumber"], value)), invalidSupplier(draft, results)),
+    inputCell("Documento", draft.documentNumber || "", (value) => setDraft(update(draft, ["documentNumber"], value)), isInvalid(results, "purchase.documentNumber")),
+    inputCell("Tabela preco", draft.priceTable || "", (value) => setDraft(update(draft, ["priceTable"], value)), false),
+    inputCell("Frete", draft.freightMode || "", (value) => setDraft(update(draft, ["freightMode"], value)), false),
+    moneyCell("Total produtos", draft.totals?.productsTotal, (value) => setDraft(update(draft, ["totals", "productsTotal"], value)), isInvalid(results, "purchase.totals.productsTotal")),
+    moneyCell("Total geral", draft.totals?.grandTotal, (value) => setDraft(update(draft, ["totals", "grandTotal"], value)), isInvalid(results, "purchase.totals.grandTotal")),
+  );
+}
+
+function ItemsGrid({ draft, setDraft, results }) {
+  const items = draft.items || [];
+  return h(
+    "div",
+    { className: "table-wrap sheet-table" },
+    h(
+      "table",
+      null,
+      h(
+        "thead",
+        null,
+        h("tr", null, ["Linha", "Codigo", "Referencia", "Descricao", "Unid.", "Qtd.", "Vlr. Unit.", "Vlr. Total", "Produto NEX"].map((header) => h("th", { key: header }, header))),
+      ),
+      h(
+        "tbody",
+        null,
+        items.map((item, index) =>
+          h(
+            "tr",
+            { key: item.lineNumber || index },
+            h("td", null, item.lineNumber || index + 1),
+            h("td", null, cellInput(item.supplierProductCode || item.barcode || "", (value) => setDraft(updateItem(draft, index, "supplierProductCode", value)), isInvalid(results, `purchase.items[${index}].supplierProductCode`))),
+            h("td", null, cellInput(item.reference || "", (value) => setDraft(updateItem(draft, index, "reference", value)), false)),
+            h("td", null, cellInput(item.description || "", (value) => setDraft(updateItem(draft, index, "description", value)), isInvalid(results, `purchase.items[${index}].description`))),
+            h("td", null, cellInput(item.unit || "", (value) => setDraft(updateItem(draft, index, "unit", value)), false)),
+            h("td", null, numberInput(item.quantity, (value) => setDraft(updateItem(draft, index, "quantity", value)), isInvalid(results, `purchase.items[${index}].quantity`))),
+            h("td", null, moneyInput(item.unitCost, (value) => setDraft(updateItem(draft, index, "unitCost", value)), isInvalid(results, `purchase.items[${index}].unitCost`))),
+            h("td", null, moneyInput(item.totalCost, (value) => setDraft(updateItem(draft, index, "totalCost", value)), isInvalid(results, `purchase.items[${index}].totalCost`))),
+            h("td", null, cellInput(item.matchedInternalProductId || "", (value) => setDraft(updateItem(draft, index, "matchedInternalProductId", value)), isInvalid(results, `purchase.items[${index}].matchedInternalProductId`))),
+          ),
         ),
       ),
     ),
-    React.createElement(
-      "label",
-      { className: "field" },
-      React.createElement("span", null, "Revisao humana obrigatoria"),
-      React.createElement("input", {
-        type: "checkbox",
-        checked: requiresHumanReview,
-        onChange: (event) => setRequiresHumanReview(event.target.checked),
-      }),
-    ),
-    React.createElement(
-      "button",
-      {
-        className: "button primary",
-        disabled: busy || !file,
-        onClick: () => onUpload({ file, reader, requiresHumanReview }),
-      },
-      busy ? "Processando..." : "Enviar para revisao",
-    ),
   );
-}
-
-function ProposalReview({ proposal, approved, busy, canApprove, onReview, onApprove }) {
-  const [draftDecisions, setDraftDecisions] = useState({});
-
-  function setDecision(fieldPath, patch) {
-    setDraftDecisions((current) => ({
-      ...current,
-      [fieldPath]: {
-        fieldPath,
-        decision: "ACCEPT",
-        reviewedBy: "operadora",
-        ...(current[fieldPath] || {}),
-        ...patch,
-      },
-    }));
-  }
-
-  const decisions = Object.values(draftDecisions);
-
-  return React.createElement(
-    React.Fragment,
-    null,
-    React.createElement(
-      "section",
-      { className: "panel" },
-      React.createElement(
-        "div",
-        { className: "actions" },
-        React.createElement("h2", { style: { marginRight: "auto" } }, "Proposta de importacao"),
-        React.createElement("span", { className: `status ${proposal.status === "PROPOSED" ? "ok" : "review"}` }, proposal.status),
-      ),
-      React.createElement(Summary, { proposal }),
-      approved
-        ? React.createElement("div", { className: "issue warning" }, `Compra aprovada por ${approved.approvedBy}.`)
-        : null,
-    ),
-    React.createElement(ValidationPanel, { results: proposal.validationResults || [] }),
-    React.createElement(FieldsPanel, { fields: proposal.extractedFields || [], draftDecisions, setDecision }),
-    React.createElement(ItemsPanel, { purchase: proposal.purchaseDraft }),
-    React.createElement(
-      "section",
-      { className: "panel actions" },
-      React.createElement(
-        "button",
-        {
-          className: "button secondary",
-          disabled: busy || decisions.length === 0,
-          onClick: () => onReview(decisions),
-        },
-        "Salvar revisao",
-      ),
-      React.createElement(
-        "button",
-        {
-          className: "button primary",
-          disabled: busy || !canApprove,
-          onClick: onApprove,
-        },
-        "Confirmar importacao",
-      ),
-    ),
-  );
-}
-
-function Summary({ proposal }) {
-  const purchase = proposal.purchaseDraft || {};
-  const supplier = purchase.supplier || {};
-  const totals = purchase.totals || {};
-  return React.createElement(
-    "div",
-    { className: "summary" },
-    metric("Fornecedor", supplier.legalName || "-"),
-    metric("Documento", purchase.documentNumber || "-"),
-    metric("Itens", String((purchase.items || []).length)),
-    metric("Total", money(totals.grandTotal)),
-  );
-}
-
-function metric(label, value) {
-  return React.createElement("div", { className: "metric" }, React.createElement("strong", null, label), React.createElement("span", null, value));
 }
 
 function ValidationPanel({ results }) {
-  return React.createElement(
+  const blocking = results.filter((item) => item.blocking);
+  return h(
     "section",
-    { className: "panel" },
-    React.createElement("h2", null, "Validacoes"),
-    results.length === 0
-      ? React.createElement("p", { className: "empty" }, "Sem validacoes bloqueantes.")
-      : results.map((item) =>
-          React.createElement(
+    { className: "panel validation-panel" },
+    h("h2", null, "Pendencias"),
+    blocking.length === 0
+      ? h("p", { className: "success" }, "Sem campos obrigatorios pendentes. A compra pode ser aprovada.")
+      : blocking.map((item) =>
+          h(
             "div",
-            { key: `${item.code}-${item.field}`, className: `issue ${item.severity === "WARNING" ? "warning" : ""}` },
-            React.createElement("strong", null, item.code),
-            React.createElement("div", null, item.message),
-            React.createElement("small", null, item.field),
+            { key: `${item.code}-${item.field}`, className: "issue" },
+            h("strong", null, item.code),
+            h("span", null, item.message),
+            h("code", null, item.field),
           ),
         ),
   );
 }
 
-function FieldsPanel({ fields, draftDecisions, setDecision }) {
-  return React.createElement(
+function ApprovalPanel({ approved }) {
+  const purchase = approved.approvedPurchase || approved;
+  const exportResult = approved.exportResult;
+  return h(
     "section",
-    { className: "panel grid" },
-    React.createElement("h2", null, "Campos extraidos"),
-    fields.length === 0
-      ? React.createElement("p", { className: "empty" }, "Nenhum campo rastreavel informado.")
-      : fields.map((field) =>
-          React.createElement(
-            "article",
-            { className: "field-card", key: field.fieldPath },
-            React.createElement(
-              "header",
-              null,
-              React.createElement("code", null, field.fieldPath),
-              React.createElement("span", null, `${Math.round((field.confidence || 0) * 100)}%`),
-            ),
-            React.createElement("p", null, field.rawText || "-"),
-            React.createElement("small", null, `Status: ${field.status}`),
-            React.createElement(
-              "div",
-              { className: "review-row" },
-              React.createElement("input", {
-                placeholder: "valor corrigido",
-                value: draftDecisions[field.fieldPath]?.correctedValue || "",
-                onChange: (event) =>
-                  setDecision(field.fieldPath, {
-                    decision: "CORRECT",
-                    correctedValue: event.target.value,
-                  }),
-              }),
-              React.createElement(
-                "div",
-                { className: "actions" },
-                React.createElement("button", { className: "button secondary", onClick: () => setDecision(field.fieldPath, { decision: "ACCEPT" }) }, "Aceitar"),
-                React.createElement("button", { className: "button danger", onClick: () => setDecision(field.fieldPath, { decision: "REJECT" }) }, "Rejeitar"),
-              ),
-            ),
-          ),
-        ),
+    { className: "panel approval-panel" },
+    h("h2", null, "Compra aprovada"),
+    h("p", null, `Aprovada por ${purchase.approvedBy || "operadora"}.`),
+    exportResult ? h("p", null, `Saida gerada pelo adapter: ${exportResult.destination} - ${exportResult.reference}`) : null,
   );
 }
 
-function ItemsPanel({ purchase }) {
-  const items = purchase?.items || [];
-  return React.createElement(
-    "section",
-    { className: "panel" },
-    React.createElement("h2", null, "Itens da compra"),
-    React.createElement(
-      "div",
-      { className: "table-wrap" },
-      React.createElement(
-        "table",
-        null,
-        React.createElement(
-          "thead",
-          null,
-          React.createElement(
-            "tr",
-            null,
-            ["Linha", "Codigo", "Referencia", "Descricao", "Qtd", "Unitario", "Total", "Produto interno"].map((header) =>
-              React.createElement("th", { key: header }, header),
-            ),
-          ),
-        ),
-        React.createElement(
-          "tbody",
-          null,
-          items.map((item) =>
-            React.createElement(
-              "tr",
-              { key: item.lineNumber },
-              React.createElement("td", null, item.lineNumber),
-              React.createElement("td", null, item.barcode || item.supplierProductCode || "-"),
-              React.createElement("td", null, item.reference || "-"),
-              React.createElement("td", null, item.description || "-"),
-              React.createElement("td", null, item.quantity),
-              React.createElement("td", null, money(item.unitCost)),
-              React.createElement("td", null, money(item.totalCost)),
-              React.createElement("td", null, item.matchedInternalProductId || "pendente"),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
+function inputCell(label, value, onChange, invalid) {
+  return h("label", { className: "sheet-cell" }, h("span", null, label), cellInput(value, onChange, invalid));
 }
 
-function money(value) {
-  if (!value || typeof value.cents !== "number") return "R$ 0,00";
-  return (value.cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function moneyCell(label, value, onChange, invalid) {
+  return h("label", { className: "sheet-cell" }, h("span", null, label), moneyInput(value, onChange, invalid));
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+function cellInput(value, onChange, invalid) {
+  return h("input", { className: `cell-input ${invalid ? "invalid" : ""}`, value, onChange: (event) => onChange(event.target.value) });
+}
+
+function numberInput(value, onChange, invalid) {
+  return h("input", { className: `cell-input number ${invalid ? "invalid" : ""}`, type: "number", step: "0.01", value: value ?? 0, onChange: (event) => onChange(Number(event.target.value)) });
+}
+
+function moneyInput(value, onChange, invalid) {
+  return h("input", {
+    className: `cell-input money ${invalid ? "invalid" : ""}`,
+    type: "number",
+    step: "0.01",
+    value: moneyNumber(value),
+    onChange: (event) => onChange({ cents: Math.round(Number(event.target.value || 0) * 100) }),
+  });
+}
+
+function buildEdits(draft) {
+  const edits = [
+    edit("purchase.supplier.legalName", draft.supplier?.legalName || ""),
+    edit("purchase.supplier.documentNumber", draft.supplier?.documentNumber || ""),
+    edit("purchase.documentNumber", draft.documentNumber || ""),
+    edit("purchase.priceTable", draft.priceTable || ""),
+    edit("purchase.freightMode", draft.freightMode || ""),
+    edit("purchase.totals.productsTotal", draft.totals?.productsTotal || { cents: 0 }),
+    edit("purchase.totals.grandTotal", draft.totals?.grandTotal || { cents: 0 }),
+  ];
+  (draft.items || []).forEach((item, index) => {
+    edits.push(
+      edit(`purchase.items[${index}].supplierProductCode`, item.supplierProductCode || ""),
+      edit(`purchase.items[${index}].reference`, item.reference || ""),
+      edit(`purchase.items[${index}].description`, item.description || ""),
+      edit(`purchase.items[${index}].unit`, item.unit || ""),
+      edit(`purchase.items[${index}].quantity`, item.quantity || 0),
+      edit(`purchase.items[${index}].unitCost`, item.unitCost || { cents: 0 }),
+      edit(`purchase.items[${index}].totalCost`, item.totalCost || { cents: 0 }),
+      edit(`purchase.items[${index}].matchedInternalProductId`, item.matchedInternalProductId || ""),
+    );
+  });
+  return edits;
+}
+
+function edit(fieldPath, value) {
+  return { fieldPath, value, editedBy: "operadora" };
+}
+
+function clonePurchase(purchase) {
+  return JSON.parse(JSON.stringify(purchase || { supplier: {}, totals: {}, items: [] }));
+}
+
+function update(source, path, value) {
+  const next = clonePurchase(source);
+  let target = next;
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const key = path[index];
+    target[key] = target[key] || {};
+    target = target[key];
+  }
+  target[path[path.length - 1]] = value;
+  return next;
+}
+
+function updateItem(draft, index, field, value) {
+  const next = clonePurchase(draft);
+  next.items[index] = { ...(next.items[index] || {}), [field]: value };
+  return next;
+}
+
+function invalidSupplier(draft, results) {
+  const supplier = draft.supplier || {};
+  return (!supplier.legalName && !supplier.documentNumber) || results.some((item) => normalizePath(item.field) === "supplier");
+}
+
+function isInvalid(results, path) {
+  const expected = normalizePath(path);
+  return results.some((item) => item.blocking && normalizePath(item.field) === expected);
+}
+
+function normalizePath(path) {
+  return String(path || "").replace(/^purchase\./, "").replace(/^purchaseDraft\./, "");
+}
+
+function moneyNumber(value) {
+  if (!value || typeof value.cents !== "number") return "0.00";
+  return (value.cents / 100).toFixed(2);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(App));

@@ -12,7 +12,7 @@ type ImportPurchaseProposalPort interface {
 }
 
 type ReviewImportProposalPort interface {
-	Review(ctx context.Context, proposalID string, decisions []application.ReviewDecision) (application.ImportProposal, error)
+	Review(ctx context.Context, proposalID string, edits []application.ReviewEdit) (application.ImportProposal, error)
 }
 
 type ApprovePurchasePort interface {

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"projeto_pos/backend/internal/adapters/persistence/memory"
@@ -47,6 +48,63 @@ func TestCreateImportAndGetProposal(t *testing.T) {
 	defer getResp.Body.Close()
 	if getResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getResp.StatusCode)
+	}
+}
+
+func TestReviewEditsAndApproveExportsPurchase(t *testing.T) {
+	server := httptest.NewServer(NewServer(memory.NewRepository(), t.TempDir(), ""))
+	defer server.Close()
+
+	content := strings.Replace(string(readFile(t, "../../..//testdata/sample-import-proposal.json")), `"currentPage": 1`, `"currentPage": 2`, 1)
+	body, contentType := multipartBody(t, "file", "sample.json", []byte(content), map[string]string{
+		"reader":              "manualjson",
+		"requiresHumanReview": "false",
+	})
+	resp, err := http.Post(server.URL+"/api/imports", contentType, body)
+	if err != nil {
+		t.Fatalf("post import: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		data, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, string(data))
+	}
+	var proposal application.ImportProposal
+	if err := json.NewDecoder(resp.Body).Decode(&proposal); err != nil {
+		t.Fatalf("decode proposal: %v", err)
+	}
+
+	reviewBody := bytes.NewBufferString(`{"edits":[{"fieldPath":"purchase.items[0].matchedInternalProductId","value":"prod-editado","editedBy":"tester"}]}`)
+	reviewResp, err := http.Post(server.URL+"/api/imports/"+proposal.ID+"/review", "application/json", reviewBody)
+	if err != nil {
+		t.Fatalf("post review: %v", err)
+	}
+	defer reviewResp.Body.Close()
+	if reviewResp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(reviewResp.Body)
+		t.Fatalf("expected 200, got %d: %s", reviewResp.StatusCode, string(data))
+	}
+
+	approveResp, err := http.Post(server.URL+"/api/imports/"+proposal.ID+"/approve", "application/json", bytes.NewBufferString(`{"reviewer":"tester"}`))
+	if err != nil {
+		t.Fatalf("post approve: %v", err)
+	}
+	defer approveResp.Body.Close()
+	if approveResp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(approveResp.Body)
+		t.Fatalf("expected 200, got %d: %s", approveResp.StatusCode, string(data))
+	}
+	var output struct {
+		ExportResult application.ExportResult `json:"exportResult"`
+	}
+	if err := json.NewDecoder(approveResp.Body).Decode(&output); err != nil {
+		t.Fatalf("decode approve response: %v", err)
+	}
+	if output.ExportResult.Destination != "csv" {
+		t.Fatalf("unexpected export destination: %s", output.ExportResult.Destination)
+	}
+	if _, err := os.Stat(output.ExportResult.Reference); err != nil {
+		t.Fatalf("expected export file to exist: %v", err)
 	}
 }
 
