@@ -27,6 +27,15 @@ const api = {
       }),
     );
   },
+  async createDemoImport() {
+    const response = await fetch("/demo-import-proposal.json", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error("Nao foi possivel carregar a massa de exemplo.");
+    }
+    const blob = await response.blob();
+    const file = new File([blob], "demo-import-proposal.json", { type: "application/json" });
+    return this.createImport({ file, reader: "manualjson", requiresHumanReview: false });
+  },
 };
 
 async function readResponse(response) {
@@ -80,6 +89,11 @@ function App() {
               setApproved(null);
               setProposal(await api.createImport(input));
             }),
+          onDemo: () =>
+            run(async () => {
+              setApproved(null);
+              setProposal(await api.createDemoImport());
+            }),
         })
       : h(ReviewScreen, {
           proposal,
@@ -108,7 +122,7 @@ function Stepper({ active }) {
   );
 }
 
-function UploadScreen({ busy, onUpload }) {
+function UploadScreen({ busy, onUpload, onDemo }) {
   const [file, setFile] = useState(null);
   const [reader, setReader] = useState("auto");
   const [requiresHumanReview, setRequiresHumanReview] = useState(true);
@@ -150,9 +164,18 @@ function UploadScreen({ busy, onUpload }) {
         ),
       ),
       h(
-        "button",
-        { className: "button primary upload-action", disabled: busy || !file, onClick: () => onUpload({ file, reader, requiresHumanReview }) },
-        busy ? "Processando..." : "Processar e abrir validacao",
+        "div",
+        { className: "upload-actions" },
+        h(
+          "button",
+          { className: "button primary upload-action", disabled: busy || !file, onClick: () => onUpload({ file, reader, requiresHumanReview }) },
+          busy ? "Processando..." : "Processar e abrir validacao",
+        ),
+        h(
+          "button",
+          { className: "button secondary upload-action", disabled: busy, onClick: onDemo },
+          busy ? "Carregando..." : "Usar dados de exemplo",
+        ),
       ),
     ),
   );

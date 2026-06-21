@@ -151,8 +151,13 @@ select {
   grid-template-columns: minmax(220px, 1fr) auto;
 }
 
-.upload-action {
+.upload-actions {
+  display: flex;
+  gap: 10px;
   margin-top: 8px;
+}
+
+.upload-action {
   min-width: 240px;
 }
 
@@ -452,6 +457,10 @@ th {
 
   .upload-options {
     grid-template-columns: 1fr;
+  }
+
+  .upload-actions {
+    flex-direction: column;
   }
 
   .header-sheet {
