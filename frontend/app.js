@@ -42,6 +42,7 @@ function App() {
   const [approved, setApproved] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const onUploadScreen = !proposal;
 
   async function run(action) {
     setError("");
@@ -55,87 +56,109 @@ function App() {
     }
   }
 
+  function resetFlow() {
+    setProposal(null);
+    setApproved(null);
+    setError("");
+  }
+
   return h(
     "div",
     { className: "app" },
-    h("header", { className: "topbar" }, h("h1", null, "Importacao de compras NEX"), h("p", null, "Upload, conferencia em tabela e aprovacao na mesma tela")),
     h(
-      "div",
-      { className: "layout desktop" },
-      h(UploadPanel, {
-        busy,
-        onUpload: (input) =>
-          run(async () => {
-            setApproved(null);
-            setProposal(await api.createImport(input));
-          }),
-      }),
-      h(
-        "main",
-        { className: "workspace" },
-        error ? h("div", { className: "error" }, error) : null,
-        proposal
-          ? h(ReviewWorkspace, {
-              proposal,
-              approved,
-              busy,
-              onReview: (edits) =>
-                run(async () => {
-                  setProposal(await api.review(proposal.id, edits));
-                  setApproved(null);
-                }),
-              onApprove: () =>
-                run(async () => {
-                  setApproved(await api.approve(proposal.id));
-                }),
-            })
-          : h("section", { className: "panel empty-state" }, "Envie um documento para gerar a tabela de revisao."),
-      ),
+      "header",
+      { className: "topbar" },
+      h("div", null, h("h1", null, "Importacao de compras NEX"), h("p", null, onUploadScreen ? "Tela 1 - upload do documento" : "Tela 2 - validacao, edicao e aprovacao")),
+      h(Stepper, { active: onUploadScreen ? "upload" : "review" }),
     ),
+    error ? h("div", { className: "global-error" }, error) : null,
+    onUploadScreen
+      ? h(UploadScreen, {
+          busy,
+          onUpload: (input) =>
+            run(async () => {
+              setApproved(null);
+              setProposal(await api.createImport(input));
+            }),
+        })
+      : h(ReviewScreen, {
+          proposal,
+          approved,
+          busy,
+          onNewUpload: resetFlow,
+          onReview: (edits) =>
+            run(async () => {
+              setProposal(await api.review(proposal.id, edits));
+              setApproved(null);
+            }),
+          onApprove: () =>
+            run(async () => {
+              setApproved(await api.approve(proposal.id));
+            }),
+        }),
   );
 }
 
-function UploadPanel({ busy, onUpload }) {
+function Stepper({ active }) {
+  return h(
+    "nav",
+    { className: "stepper", "aria-label": "Etapas da importacao" },
+    h("span", { className: active === "upload" ? "step active" : "step done" }, "1 Upload"),
+    h("span", { className: active === "review" ? "step active" : "step" }, "2 Validacao"),
+  );
+}
+
+function UploadScreen({ busy, onUpload }) {
   const [file, setFile] = useState(null);
   const [reader, setReader] = useState("auto");
   const [requiresHumanReview, setRequiresHumanReview] = useState(true);
 
   return h(
-    "aside",
-    { className: "panel upload-panel" },
-    h("h2", null, "1. Upload"),
-    h("p", { className: "muted" }, "Documento do fornecedor: XLSX, JSON, PDF ou foto com sidecar OCR."),
+    "main",
+    { className: "screen upload-screen" },
     h(
-      "div",
-      { className: "field" },
-      h("label", null, "Arquivo"),
-      h("input", { type: "file", onChange: (event) => setFile(event.target.files[0] || null) }),
-    ),
-    h(
-      "div",
-      { className: "field" },
-      h("label", null, "Reader"),
+      "section",
+      { className: "panel upload-card" },
+      h("div", { className: "screen-kicker" }, "Tela 1"),
+      h("h2", null, "Upload do documento"),
+      h("p", { className: "muted" }, "Selecione o arquivo recebido do fornecedor. Depois do processamento, o sistema abre a tela de validacao em tabela."),
       h(
-        "select",
-        { value: reader, onChange: (event) => setReader(event.target.value) },
-        ["auto", "manualjson", "xlsx", "pdf", "imageocr"].map((item) => h("option", { key: item, value: item }, item)),
+        "div",
+        { className: "upload-dropzone" },
+        h("strong", null, file ? file.name : "Escolha um arquivo para processar"),
+        h("span", null, "JSON controlado, XLSX, PDF ou imagem com sidecar OCR"),
+        h("input", { type: "file", onChange: (event) => setFile(event.target.files[0] || null) }),
       ),
-    ),
-    h(
-      "label",
-      { className: "checkbox" },
-      h("input", { type: "checkbox", checked: requiresHumanReview, onChange: (event) => setRequiresHumanReview(event.target.checked) }),
-      h("span", null, "Exigir conferencia humana"),
-    ),
-    h(
-      "button",
-      { className: "button primary full", disabled: busy || !file, onClick: () => onUpload({ file, reader, requiresHumanReview }) },
-      busy ? "Processando..." : "Processar documento",
+      h(
+        "div",
+        { className: "upload-options" },
+        h(
+          "div",
+          { className: "field" },
+          h("label", null, "Reader"),
+          h(
+            "select",
+            { value: reader, onChange: (event) => setReader(event.target.value) },
+            ["auto", "manualjson", "xlsx", "pdf", "imageocr"].map((item) => h("option", { key: item, value: item }, item)),
+          ),
+        ),
+        h(
+          "label",
+          { className: "checkbox" },
+          h("input", { type: "checkbox", checked: requiresHumanReview, onChange: (event) => setRequiresHumanReview(event.target.checked) }),
+          h("span", null, "Exigir conferencia humana"),
+        ),
+      ),
+      h(
+        "button",
+        { className: "button primary upload-action", disabled: busy || !file, onClick: () => onUpload({ file, reader, requiresHumanReview }) },
+        busy ? "Processando..." : "Processar e abrir validacao",
+      ),
     ),
   );
 }
 
-function ReviewWorkspace({ proposal, approved, busy, onReview, onApprove }) {
+function ReviewScreen({ proposal, approved, busy, onNewUpload, onReview, onApprove }) {
   const [draft, setDraft] = useState(clonePurchase(proposal.purchaseDraft));
   const blocking = useMemo(() => (proposal.validationResults || []).filter((item) => item.blocking), [proposal]);
   const canApprove = blocking.length === 0 && proposal.status === "PROPOSED" && !approved;
@@ -145,19 +168,25 @@ function ReviewWorkspace({ proposal, approved, busy, onReview, onApprove }) {
   }, [proposal.id, proposal.purchaseDraft]);
 
   return h(
-    React.Fragment,
-    null,
+    "main",
+    { className: "screen review-screen" },
     h(
       "section",
       { className: "panel review-shell" },
       h(
         "div",
         { className: "review-header" },
-        h("div", null, h("h2", null, "2. Conferencia em tabela"), h("p", { className: "muted" }, "Edite direto nas celulas. Obrigatorios pendentes ficam em vermelho.")),
-        h("span", { className: `status ${canApprove ? "ok" : "review"}` }, canApprove ? "Pronto para aprovar" : `${blocking.length} pendencia(s)`),
+        h("div", null, h("div", { className: "screen-kicker" }, "Tela 2"), h("h2", null, "Validacao da importacao"), h("p", { className: "muted" }, "Confira a tabela processada. Campos obrigatorios pendentes aparecem em vermelho.")),
+        h(
+          "div",
+          { className: "review-status" },
+          h("span", { className: `status ${canApprove ? "ok" : "review"}` }, canApprove ? "Pronto para aprovar" : `${blocking.length} pendencia(s)`),
+          h("button", { className: "button ghost", disabled: busy, onClick: onNewUpload }, "Novo upload"),
+        ),
       ),
       h(HeaderGrid, { draft, setDraft, results: proposal.validationResults || [] }),
       h(ItemsGrid, { draft, setDraft, results: proposal.validationResults || [] }),
+      h(ValidationPanel, { results: proposal.validationResults || [] }),
       h(
         "div",
         { className: "review-actions" },
@@ -165,7 +194,6 @@ function ReviewWorkspace({ proposal, approved, busy, onReview, onApprove }) {
         h("button", { className: "button primary", disabled: busy || !canApprove, onClick: onApprove }, "Aprovar e integrar NEX"),
       ),
     ),
-    h(ValidationPanel, { results: proposal.validationResults || [] }),
     approved ? h(ApprovalPanel, { approved }) : null,
   );
 }
@@ -225,8 +253,8 @@ function ValidationPanel({ results }) {
   const blocking = results.filter((item) => item.blocking);
   return h(
     "section",
-    { className: "panel validation-panel" },
-    h("h2", null, "Pendencias"),
+    { className: "validation-panel" },
+    h("h3", null, "Pendencias de validacao"),
     blocking.length === 0
       ? h("p", { className: "success" }, "Sem campos obrigatorios pendentes. A compra pode ser aprovada.")
       : blocking.map((item) =>

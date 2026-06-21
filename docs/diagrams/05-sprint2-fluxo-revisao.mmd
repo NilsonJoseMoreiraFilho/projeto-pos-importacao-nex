@@ -1,45 +1,43 @@
-﻿flowchart TB
-    inicio([Documento recebido]) --> upload[Upload pela operadora]
-    upload --> reader{Tipo de entrada}
-    reader -->|JSON controlado| manual[ManualJsonDocumentReader]
-    reader -->|XLSX| xlsx[XlsxDocumentReader]
-    reader -->|PDF| pdf[PdfDocumentReader / sidecar]
-    reader -->|Foto| ocr[ImageOcrDocumentReader / sidecar OCR]
+flowchart TB
+    inicio([Inicio]) --> telaUpload["Tela 1: Upload do documento"]
+    telaUpload --> enviar["Enviar arquivo para processamento"]
+    enviar --> reader{Tipo de entrada}
 
-    manual --> proposta[Gerar ImportProposal]
+    reader -->|JSON controlado| manual["ManualJsonDocumentReader"]
+    reader -->|XLSX| xlsx["XlsxDocumentReader"]
+    reader -->|PDF| pdf["PdfDocumentReader / sidecar"]
+    reader -->|Foto| ocr["ImageOcrDocumentReader / sidecar OCR"]
+
+    manual --> proposta["Gerar ImportProposal"]
     xlsx --> proposta
     pdf --> proposta
     ocr --> proposta
 
-    proposta --> validacao[Validar fornecedor, itens, totais, pagina e produto interno]
-    validacao --> tela[Tela de revisao humana]
+    proposta --> validar["Validar fornecedor, itens, totais, paginas e produto NEX"]
+    validar --> telaValidacao["Tela 2: Validacao em grade editavel"]
 
-    tela --> revisar{Operadora revisa campos}
-    revisar -->|Aceitar| aceitar[Campo marcado como revisado]
-    revisar -->|Corrigir| corrigir[Atualiza valor normalizado e rascunho]
-    revisar -->|Rejeitar| rejeitar[Campo rejeitado]
+    telaValidacao --> tabela["Exibir cabecalho e itens como planilha"]
+    tabela --> destacar["Destacar obrigatorios vazios em vermelho"]
+    destacar --> editar["Operadora edita celulas diretamente"]
+    editar --> salvar["Salvar alteracoes como edits"]
+    salvar --> revalidar["Backend aplica edits e revalida"]
 
-    aceitar --> revalidar[Revalidar proposta]
-    corrigir --> revalidar
-    rejeitar --> bloqueio[Manter bloqueio de aprovacao]
+    revalidar --> pendencias{Ha pendencias bloqueantes?}
+    pendencias -->|Sim| telaValidacao
+    pendencias -->|Nao| aprovar["Aprovar e integrar NEX"]
 
-    revalidar --> decisao{Ha erros bloqueantes?}
-    decisao -->|Sim| tela
-    decisao -->|Nao| aprovar[Confirmar importacao]
-    bloqueio --> tela
-
-    aprovar --> approved[Gerar ApprovedPurchase]
-    approved --> saida[Saida demonstrativa CSV/XLSX]
-    saida --> fim([Fim da Sprint 2])
+    aprovar --> approved["Gerar ApprovedPurchase"]
+    approved --> saida["Acionar adapter de saida / integracao"]
+    saida --> fim([Fim])
 
     classDef start fill:#dcfce7,stroke:#16a34a,color:#111827;
+    classDef screen fill:#f8fafc,stroke:#475569,color:#111827;
     classDef process fill:#dbeafe,stroke:#2563eb,color:#111827;
     classDef decision fill:#fef3c7,stroke:#d97706,color:#111827;
-    classDef danger fill:#fee2e2,stroke:#dc2626,color:#111827;
     classDef output fill:#ede9fe,stroke:#7c3aed,color:#111827;
 
     class inicio,fim start;
-    class upload,manual,xlsx,pdf,ocr,proposta,validacao,tela,aceitar,corrigir,revalidar,aprovar process;
-    class reader,revisar,decisao decision;
-    class rejeitar,bloqueio danger;
+    class telaUpload,telaValidacao screen;
+    class enviar,manual,xlsx,pdf,ocr,proposta,validar,tabela,destacar,editar,salvar,revalidar,aprovar process;
+    class reader,pendencias decision;
     class approved,saida output;
