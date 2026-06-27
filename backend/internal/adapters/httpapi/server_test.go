@@ -108,6 +108,55 @@ func TestReviewEditsAndApproveExportsPurchase(t *testing.T) {
 	}
 }
 
+func TestDownloadXLSXExportsReviewedDraft(t *testing.T) {
+	server := httptest.NewServer(NewServer(memory.NewRepository(), t.TempDir(), ""))
+	defer server.Close()
+
+	content := strings.Replace(string(readFile(t, "../../..//testdata/sample-import-proposal.json")), `"currentPage": 1`, `"currentPage": 2`, 1)
+	body, contentType := multipartBody(t, "file", "sample.json", []byte(content), map[string]string{
+		"reader":              "manualjson",
+		"requiresHumanReview": "true",
+	})
+	resp, err := http.Post(server.URL+"/api/imports", contentType, body)
+	if err != nil {
+		t.Fatalf("post import: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		data, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, string(data))
+	}
+	var proposal application.ImportProposal
+	if err := json.NewDecoder(resp.Body).Decode(&proposal); err != nil {
+		t.Fatalf("decode proposal: %v", err)
+	}
+
+	downloadBody := bytes.NewBufferString(`{"edits":[{"fieldPath":"purchase.documentNumber","value":"DOC-BAIXADO","editedBy":"tester"}]}`)
+	downloadResp, err := http.Post(server.URL+"/api/imports/"+proposal.ID+"/download-xlsx", "application/json", downloadBody)
+	if err != nil {
+		t.Fatalf("post download xlsx: %v", err)
+	}
+	defer downloadResp.Body.Close()
+	if downloadResp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(downloadResp.Body)
+		t.Fatalf("expected 200, got %d: %s", downloadResp.StatusCode, string(data))
+	}
+	if !strings.Contains(downloadResp.Header.Get("Content-Disposition"), ".xlsx") {
+		t.Fatalf("expected xlsx attachment, got %s", downloadResp.Header.Get("Content-Disposition"))
+	}
+	data, err := io.ReadAll(downloadResp.Body)
+	if err != nil {
+		t.Fatalf("read xlsx response: %v", err)
+	}
+	if len(data) < 4 || string(data[:2]) != "PK" {
+		firstBytes := data
+		if len(firstBytes) > 4 {
+			firstBytes = firstBytes[:4]
+		}
+		t.Fatalf("expected xlsx zip response, got first bytes %#v", firstBytes)
+	}
+}
+
 func TestSelectReaderRejectsUnknownExtension(t *testing.T) {
 	_, err := SelectReader("auto", "pedido.txt")
 	if err == nil {

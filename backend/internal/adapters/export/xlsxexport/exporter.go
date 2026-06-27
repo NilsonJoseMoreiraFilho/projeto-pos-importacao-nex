@@ -29,6 +29,7 @@ func (e Exporter) ExportApprovedPurchase(_ context.Context, purchase domain.Appr
 		"document_number",
 		"supplier",
 		"line",
+		"supplier_product_code",
 		"barcode",
 		"reference",
 		"description",
@@ -36,7 +37,6 @@ func (e Exporter) ExportApprovedPurchase(_ context.Context, purchase domain.Appr
 		"quantity",
 		"unit_cost",
 		"total_cost",
-		"matched_internal_product_id",
 	}
 	for i, header := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
@@ -48,6 +48,7 @@ func (e Exporter) ExportApprovedPurchase(_ context.Context, purchase domain.Appr
 			purchase.Purchase.DocumentNumber,
 			purchase.Purchase.Supplier.LegalName,
 			item.LineNumber,
+			item.SupplierProductCode,
 			item.Barcode,
 			item.Reference,
 			item.Description,
@@ -55,7 +56,6 @@ func (e Exporter) ExportApprovedPurchase(_ context.Context, purchase domain.Appr
 			item.Quantity,
 			item.UnitCost.Float64(),
 			item.TotalCost.Float64(),
-			item.MatchedInternalProductID,
 		}
 		for col, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(col+1, row+2)

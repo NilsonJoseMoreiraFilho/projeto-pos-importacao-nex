@@ -22,13 +22,10 @@ flowchart TB
     editar --> salvar["Salvar alteracoes como edits"]
     salvar --> revalidar["Backend aplica edits e revalida"]
 
-    revalidar --> pendencias{Ha pendencias bloqueantes?}
-    pendencias -->|Sim| telaValidacao
-    pendencias -->|Nao| aprovar["Aprovar e integrar NEX"]
-
-    aprovar --> approved["Gerar ApprovedPurchase"]
-    approved --> saida["Acionar adapter de saida / integracao"]
-    saida --> fim([Fim])
+    revalidar --> pendencias["Exibir pontos de conferencia em linguagem humana"]
+    pendencias --> baixar["Baixar Excel com dados processados"]
+    baixar --> manualNex["Importacao manual no NEX pela operadora"]
+    manualNex --> fim([Fim])
 
     classDef start fill:#dcfce7,stroke:#16a34a,color:#111827;
     classDef screen fill:#f8fafc,stroke:#475569,color:#111827;
@@ -38,6 +35,6 @@ flowchart TB
 
     class inicio,fim start;
     class telaUpload,telaValidacao screen;
-    class enviar,manual,xlsx,pdf,ocr,proposta,validar,tabela,destacar,editar,salvar,revalidar,aprovar process;
-    class reader,pendencias decision;
-    class approved,saida output;
+    class enviar,manual,xlsx,pdf,ocr,proposta,validar,tabela,destacar,editar,salvar,revalidar,baixar process;
+    class reader decision;
+    class pendencias,manualNex output;

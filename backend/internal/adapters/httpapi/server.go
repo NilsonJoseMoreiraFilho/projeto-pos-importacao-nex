@@ -17,8 +17,10 @@ import (
 	pdfreader "projeto_pos/backend/internal/adapters/documentreader/pdf"
 	xlsxreader "projeto_pos/backend/internal/adapters/documentreader/xlsx"
 	"projeto_pos/backend/internal/adapters/export/csvexport"
+	"projeto_pos/backend/internal/adapters/export/xlsxexport"
 	"projeto_pos/backend/internal/adapters/persistence/memory"
 	"projeto_pos/backend/internal/application"
+	"projeto_pos/backend/internal/domain"
 )
 
 type Server struct {
@@ -49,6 +51,7 @@ func (s *Server) routes(frontendDir string) {
 	s.mux.HandleFunc("GET /api/imports/{id}", s.handleGetImport)
 	s.mux.HandleFunc("POST /api/imports/{id}/review", s.handleReviewImport)
 	s.mux.HandleFunc("POST /api/imports/{id}/approve", s.handleApproveImport)
+	s.mux.HandleFunc("POST /api/imports/{id}/download-xlsx", s.handleDownloadXLSX)
 	s.mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -180,6 +183,50 @@ func (s *Server) handleApproveImport(w http.ResponseWriter, r *http.Request) {
 		"approvedPurchase": approved,
 		"exportResult":     exportResult,
 	})
+}
+
+func (s *Server) handleDownloadXLSX(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Edits []application.ReviewEdit `json:"edits"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	for i := range request.Edits {
+		if request.Edits[i].EditedAt.IsZero() {
+			request.Edits[i].EditedAt = time.Now().UTC()
+		}
+		if request.Edits[i].EditedBy == "" {
+			request.Edits[i].EditedBy = "operadora"
+		}
+	}
+	proposal, err := application.NewReviewImportProposalService(s.repository).Review(r.Context(), r.PathValue("id"), request.Edits)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+
+	fileName := fmt.Sprintf("nex-import-%s.xlsx", sanitizeFileName(r.PathValue("id")))
+	exportPath := filepath.Join(filepath.Dir(s.uploadDir), "exports", fileName)
+	if err := os.MkdirAll(filepath.Dir(exportPath), 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	approved := domain.ApprovedPurchase{
+		Purchase:   proposal.PurchaseDraft,
+		ApprovedBy: "operadora",
+		ApprovedAt: time.Now().UTC(),
+	}
+	if _, err := xlsxexport.NewExporter(exportPath).ExportApprovedPurchase(r.Context(), approved); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fileName))
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeFile(w, r, exportPath)
 }
 
 func SelectReader(name string, input string) (application.DocumentReader, error) {

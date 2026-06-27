@@ -2,9 +2,9 @@
 
 ## Objetivo
 
-A Sprint 2 transforma a fatia backend da Sprint 1 em um fluxo operavel pela dona/operadora da loja. O foco da revisao humana nao e aprovar campo a campo em um processo formal, mas permitir uma conferencia rapida em uma grade desktop, semelhante a uma planilha, antes da confirmacao da importacao.
+A Sprint 2 transforma a fatia backend da Sprint 1 em um fluxo operavel pela dona/operadora da loja. O foco da revisao humana nao e aprovar campo a campo em um processo formal, mas permitir uma conferencia rapida em uma grade desktop, semelhante a uma planilha, antes de baixar um Excel para importacao manual.
 
-O fluxo visual fica separado em duas telas: uma tela dedicada somente ao upload/processamento do documento e uma segunda tela dedicada a validacao, edicao da grade e aprovacao.
+O fluxo visual fica separado em duas telas: uma tela dedicada somente ao upload/processamento do documento e uma segunda tela dedicada a validacao, edicao da grade e download do Excel.
 
 ## Tarefas do quadro
 
@@ -24,7 +24,7 @@ O fluxo visual fica separado em duas telas: uma tela dedicada somente ao upload/
    - imagem via `imageocr`, usando OpenAI Vision quando `OPENAI_API_KEY` estiver configurada, sidecar `.ocr.json` quando existir, ou fallback demonstrativo sem chave.
 5. Backend cria uma `ImportProposal`.
 6. Backend executa validacoes de fornecedor, itens, totais, pagina faltante e campos obrigatorios.
-   - Divergencia de totais, pagina faltante, campos essenciais ausentes e revisao humana pendente bloqueiam aprovacao ate a conferencia/correcao.
+   - Divergencia de totais, pagina faltante, campos essenciais ausentes e revisao humana pendente aparecem como pontos de conferencia antes do download.
 7. Frontend navega para a tela 2, dedicada a validacao.
 8. Frontend exibe uma tabela editavel em formato de planilha:
    - uma linha por item importado;
@@ -33,10 +33,10 @@ O fluxo visual fica separado em duas telas: uma tela dedicada somente ao upload/
    - campos obrigatorios vazios destacados em vermelho.
 9. Operadora edita diretamente as celulas incorretas ou vazias.
 10. Frontend salva as alteracoes e backend reexecuta as validacoes.
-11. Botao de aprovar fica na tela 2, junto da tabela validada.
-12. Operadora aprova quando nao houver obrigatorios pendentes.
-13. Backend gera `ApprovedPurchase` e aciona o adaptador de integracao/saida.
-14. A integracao direta com NEX continua atras de `ManagementSystemExporterPort`; enquanto API/modelo oficial nao estiver confirmado, CSV/XLSX ou adapter simulado continuam como caminho demonstrativo.
+11. Botao de baixar Excel fica na tela 2, junto da tabela validada.
+12. Operadora baixa a planilha com os dados processados.
+13. Backend gera um arquivo XLSX a partir do rascunho revisado.
+14. A importacao no NEX e feita manualmente pela operadora enquanto API/modelo oficial nao estiver confirmado.
 
 ## Regras de revisao
 
@@ -45,10 +45,9 @@ O fluxo visual fica separado em duas telas: uma tela dedicada somente ao upload/
 - Campos obrigatorios vazios devem aparecer em vermelho.
 - Edicao de celula deve atualizar o rascunho da compra.
 - Apos edicao, a proposta deve ser revalidada.
-- Aprovacao fica na tela de validacao, na mesma tela da tabela.
-- Aprovacao deve acionar a saida/integracao por `ManagementSystemExporterPort`.
-- Para a POC, a saida pode ser CSV/XLSX ou adapter simulado enquanto a integracao real com NEX nao estiver confirmada.
-- Vinculo item a item com produto interno/NEX nao e obrigatorio nesta sprint e nao bloqueia aprovacao.
+- O download do Excel fica na tela de validacao, na mesma tela da tabela.
+- Para a POC, a saida principal e XLSX para importacao manual enquanto a integracao real com NEX nao estiver confirmada.
+- Vinculo item a item com produto interno/NEX nao e obrigatorio nesta sprint e nao impede o download do Excel.
 
 ## Contrato HTTP proposto
 
@@ -86,11 +85,11 @@ Recebe edicoes feitas na grade:
 
 Resposta: `ImportProposal` revalidada.
 
-### `POST /api/imports/{id}/approve`
+### `POST /api/imports/{id}/download-xlsx`
 
-Confirma a importacao revisada e aciona a saida/integracao configurada.
+Recebe as edicoes atuais da grade, salva a revisao e retorna um arquivo XLSX para download.
 
-Resposta: `ApprovedPurchase`.
+Resposta: arquivo `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
 
 ## Configuracao de IA para imagem
 

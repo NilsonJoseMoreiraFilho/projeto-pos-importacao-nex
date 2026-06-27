@@ -18,14 +18,17 @@ const api = {
       }),
     );
   },
-  async approve(id) {
-    return readResponse(
-      await fetch(`/api/imports/${id}/approve`, {
+  async downloadXlsx(id, edits) {
+    const response = await fetch(`/api/imports/${id}/download-xlsx`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewer: "operadora" }),
-      }),
-    );
+        body: JSON.stringify({ edits }),
+      });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Erro HTTP ${response.status}`);
+    }
+    return response.blob();
   },
   async createDemoImport() {
     const response = await fetch("/demo-import-proposal.json", { cache: "no-store" });
@@ -48,7 +51,7 @@ async function readResponse(response) {
 
 function App() {
   const [proposal, setProposal] = useState(null);
-  const [approved, setApproved] = useState(null);
+  const [downloaded, setDownloaded] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const onUploadScreen = !proposal;
@@ -67,7 +70,7 @@ function App() {
 
   function resetFlow() {
     setProposal(null);
-    setApproved(null);
+    setDownloaded(false);
     setError("");
   }
 
@@ -77,7 +80,7 @@ function App() {
     h(
       "header",
       { className: "topbar" },
-      h("div", null, h("h1", null, "Importacao de compras NEX"), h("p", null, onUploadScreen ? "Tela 1 - upload do documento" : "Tela 2 - validacao, edicao e aprovacao")),
+      h("div", null, h("h1", null, "Importacao de compras NEX"), h("p", null, onUploadScreen ? "Tela 1 - upload do documento" : "Tela 2 - validacao, edicao e download")),
       h(Stepper, { active: onUploadScreen ? "upload" : "review" }),
     ),
     error ? h("div", { className: "global-error" }, error) : null,
@@ -86,28 +89,30 @@ function App() {
           busy,
           onUpload: (input) =>
             run(async () => {
-              setApproved(null);
+              setDownloaded(false);
               setProposal(await api.createImport(input));
             }),
           onDemo: () =>
             run(async () => {
-              setApproved(null);
+              setDownloaded(false);
               setProposal(await api.createDemoImport());
             }),
         })
       : h(ReviewScreen, {
           proposal,
-          approved,
+          downloaded,
           busy,
           onNewUpload: resetFlow,
           onReview: (edits) =>
             run(async () => {
               setProposal(await api.review(proposal.id, edits));
-              setApproved(null);
+              setDownloaded(false);
             }),
-          onApprove: () =>
+          onDownload: (edits) =>
             run(async () => {
-              setApproved(await api.approve(proposal.id));
+              const blob = await api.downloadXlsx(proposal.id, edits);
+              downloadBlob(blob, `nex-import-${proposal.purchaseDraft?.documentNumber || proposal.id}.xlsx`);
+              setDownloaded(true);
             }),
         }),
   );
@@ -185,11 +190,10 @@ function UploadScreen({ busy, onUpload, onDemo }) {
   );
 }
 
-function ReviewScreen({ proposal, approved, busy, onNewUpload, onReview, onApprove }) {
+function ReviewScreen({ proposal, downloaded, busy, onNewUpload, onReview, onDownload }) {
   const [draft, setDraft] = useState(clonePurchase(proposal.purchaseDraft));
   const blocking = useMemo(() => (proposal.validationResults || []).filter((item) => item.blocking), [proposal]);
   const warnings = useMemo(() => (proposal.validationResults || []).filter((item) => !item.blocking), [proposal]);
-  const canApprove = blocking.length === 0 && proposal.status === "PROPOSED" && !approved;
 
   useEffect(() => {
     setDraft(clonePurchase(proposal.purchaseDraft));
@@ -208,7 +212,7 @@ function ReviewScreen({ proposal, approved, busy, onNewUpload, onReview, onAppro
         h(
           "div",
           { className: "review-status" },
-          h("span", { className: `status ${canApprove ? "ok" : "review"}` }, canApprove ? "Pronto para aprovar" : countLabel(blocking.length, "ação pendente", "ações pendentes")),
+          h("span", { className: `status ${blocking.length === 0 ? "ok" : "review"}` }, blocking.length === 0 ? "Pronto para baixar" : countLabel(blocking.length, "ponto para conferir", "pontos para conferir")),
           warnings.length > 0 ? h("span", { className: "status warning" }, countLabel(warnings.length, "aviso", "avisos")) : null,
           h("button", { className: "button ghost", disabled: busy, onClick: onNewUpload }, "Novo upload"),
         ),
@@ -221,10 +225,10 @@ function ReviewScreen({ proposal, approved, busy, onNewUpload, onReview, onAppro
         "div",
         { className: "review-actions" },
         h("button", { className: "button secondary", disabled: busy, onClick: () => onReview(buildEdits(draft)) }, "Salvar alteracoes"),
-        h("button", { className: "button primary", disabled: busy || !canApprove, onClick: onApprove }, "Aprovar e integrar NEX"),
+        h("button", { className: "button primary", disabled: busy, onClick: () => onDownload(buildEdits(draft)) }, downloaded ? "Baixar Excel novamente" : "Baixar Excel"),
       ),
     ),
-    approved ? h(ApprovalPanel, { approved }) : null,
+    downloaded ? h(DownloadPanel) : null,
   );
 }
 
@@ -308,7 +312,7 @@ function ValidationPanel({ results }) {
     { className: "validation-panel" },
     h("h3", null, "Pontos para conferir"),
     issues.length === 0
-      ? h("p", { className: "success" }, "Tudo certo para aprovar a compra.")
+      ? h("p", { className: "success" }, "Tudo certo para baixar o Excel da compra.")
       : issues.map((item) =>
           h(
             "div",
@@ -326,11 +330,11 @@ function readableValidation(result) {
   const messages = {
     DOCUMENT_INCOMPLETE: {
       title: "O documento parece ter mais páginas",
-      description: "A imagem indica que existe outra página. Confira se os itens desta compra estão todos na tabela antes de aprovar.",
+      description: "A imagem indica que existe outra página. Confira se os itens desta compra estão todos na tabela antes de baixar o Excel.",
     },
     HUMAN_REVIEW_REQUIRED: {
       title: "Conferência humana necessária",
-      description: "Revise os dados extraídos da imagem e clique em Salvar alterações para liberar a aprovação.",
+      description: "Revise os dados extraídos da imagem. O Excel pode ser baixado depois da conferência.",
     },
     ITEM_TOTAL_MISMATCH: {
       title: "Total de item para conferir",
@@ -346,11 +350,11 @@ function readableValidation(result) {
     },
     SUPPLIER_NOT_IDENTIFIED: {
       title: "Fornecedor não identificado",
-      description: "Informe o nome ou CNPJ/CPF do fornecedor antes de aprovar.",
+      description: "Informe o nome ou CNPJ/CPF do fornecedor antes de baixar o Excel.",
     },
     PURCHASE_WITHOUT_ITEMS: {
       title: "Nenhum item encontrado",
-      description: "A importação não encontrou itens de compra. Envie outro arquivo ou preencha os itens antes de aprovar.",
+      description: "A importação não encontrou itens de compra. Envie outro arquivo ou preencha os itens antes de baixar o Excel.",
     },
     INVALID_QUANTITY: {
       title: "Quantidade inválida",
@@ -363,7 +367,7 @@ function readableValidation(result) {
   };
   const fallback = {
     title: "Ponto para conferir",
-    description: result.message || "Confira este dado antes de aprovar.",
+    description: result.message || "Confira este dado antes de baixar o Excel.",
   };
   const message = messages[result.code] || fallback;
   return {
@@ -399,16 +403,24 @@ function readableFieldName(path) {
   return names[path] || "";
 }
 
-function ApprovalPanel({ approved }) {
-  const purchase = approved.approvedPurchase || approved;
-  const exportResult = approved.exportResult;
+function DownloadPanel() {
   return h(
     "section",
     { className: "panel approval-panel" },
-    h("h2", null, "Compra aprovada"),
-    h("p", null, `Aprovada por ${purchase.approvedBy || "operadora"}.`),
-    exportResult ? h("p", null, `Saida gerada pelo adapter: ${exportResult.destination} - ${exportResult.reference}`) : null,
+    h("h2", null, "Excel gerado"),
+    h("p", null, "A planilha foi baixada com os dados processados para importacao manual no NEX."),
   );
+}
+
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function inputCell(label, value, onChange, invalid) {
