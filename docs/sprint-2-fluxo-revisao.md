@@ -24,8 +24,7 @@ O fluxo visual fica separado em duas telas: uma tela dedicada somente ao upload/
    - imagem via `imageocr`, usando OpenAI Vision quando `OPENAI_API_KEY` estiver configurada, sidecar `.ocr.json` quando existir, ou fallback demonstrativo sem chave.
 5. Backend cria uma `ImportProposal`.
 6. Backend executa validacoes de fornecedor, itens, totais, pagina faltante e campos obrigatorios.
-   - Divergencia de totais e pagina faltante entram como aviso de conferencia, sem bloquear aprovacao nesta sprint.
-   - Campos essenciais ausentes e revisao humana pendente continuam bloqueando.
+   - Divergencia de totais, pagina faltante, campos essenciais ausentes e revisao humana pendente bloqueiam aprovacao ate a conferencia/correcao.
 7. Frontend navega para a tela 2, dedicada a validacao.
 8. Frontend exibe uma tabela editavel em formato de planilha:
    - uma linha por item importado;
@@ -107,7 +106,7 @@ Ordem de resolucao do `imageocr`:
 2. Usa OpenAI Vision, quando `OPENAI_API_KEY` existir.
 3. Usa JSON demonstrativo, quando nao houver chave.
 
-Mesmo com IA real, a proposta pode entrar em revisao humana por origem OCR/imagem, campos obrigatorios ausentes ou campos de baixa confianca. Divergencia de totais, documento incompleto e vinculo com produto interno/NEX nao bloqueiam esta sprint.
+Mesmo com IA real, a proposta pode entrar em revisao humana por origem OCR/imagem, totais divergentes, documento incompleto, campos obrigatorios ausentes ou campos de baixa confianca. Vinculo com produto interno/NEX nao bloqueia esta sprint.
 
 ## Escopo explicitamente fora da Sprint 2
 

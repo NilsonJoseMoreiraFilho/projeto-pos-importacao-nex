@@ -53,36 +53,27 @@ func TestValidatePurchaseAcceptsValidTotals(t *testing.T) {
 	}
 }
 
-func TestValidatePurchaseWarnsItemTotalMismatch(t *testing.T) {
+func TestValidatePurchaseBlocksItemTotalMismatch(t *testing.T) {
 	source, purchase := validPurchase()
 	purchase.Items[0].TotalCost = NewMoneyFromFloat(19)
 	results := ValidatePurchase(source, purchase, false)
-	assertWarningCode(t, results, "ITEM_TOTAL_MISMATCH")
-	if HasBlocking(results) {
-		t.Fatalf("item total mismatch should not block human-approved import, got %#v", results)
-	}
+	assertCode(t, results, "ITEM_TOTAL_MISMATCH")
 }
 
-func TestValidatePurchaseWarnsProductsTotalMismatch(t *testing.T) {
+func TestValidatePurchaseBlocksProductsTotalMismatch(t *testing.T) {
 	source, purchase := validPurchase()
 	purchase.Totals.ProductsTotal = NewMoneyFromFloat(30)
 	purchase.Totals.GrandTotal = NewMoneyFromFloat(30)
 	results := ValidatePurchase(source, purchase, false)
-	assertWarningCode(t, results, "PRODUCTS_TOTAL_MISMATCH")
-	if HasBlocking(results) {
-		t.Fatalf("products total mismatch should not block human-approved import, got %#v", results)
-	}
+	assertCode(t, results, "PRODUCTS_TOTAL_MISMATCH")
 }
 
-func TestValidatePurchaseWarnsMissingPage(t *testing.T) {
+func TestValidatePurchaseBlocksMissingPage(t *testing.T) {
 	source, purchase := validPurchase()
 	source.PageCount = 2
 	source.CurrentPage = 1
 	results := ValidatePurchase(source, purchase, false)
-	assertWarningCode(t, results, "DOCUMENT_INCOMPLETE")
-	if HasBlocking(results) {
-		t.Fatalf("missing page should not block human-approved import, got %#v", results)
-	}
+	assertCode(t, results, "DOCUMENT_INCOMPLETE")
 }
 
 func TestValidatePurchaseBlocksUnknownSupplier(t *testing.T) {
@@ -114,14 +105,4 @@ func assertCode(t *testing.T, results []ValidationResult, code string) {
 		}
 	}
 	t.Fatalf("expected blocking code %s, got %#v", code, results)
-}
-
-func assertWarningCode(t *testing.T, results []ValidationResult, code string) {
-	t.Helper()
-	for _, result := range results {
-		if result.Code == code && result.Severity == ValidationWarning && !result.Blocking {
-			return
-		}
-	}
-	t.Fatalf("expected non-blocking warning code %s, got %#v", code, results)
 }

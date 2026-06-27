@@ -122,6 +122,10 @@ function Stepper({ active }) {
   );
 }
 
+function countLabel(count, singular, plural) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function UploadScreen({ busy, onUpload, onDemo }) {
   const [file, setFile] = useState(null);
   const [reader, setReader] = useState("auto");
@@ -184,6 +188,7 @@ function UploadScreen({ busy, onUpload, onDemo }) {
 function ReviewScreen({ proposal, approved, busy, onNewUpload, onReview, onApprove }) {
   const [draft, setDraft] = useState(clonePurchase(proposal.purchaseDraft));
   const blocking = useMemo(() => (proposal.validationResults || []).filter((item) => item.blocking), [proposal]);
+  const warnings = useMemo(() => (proposal.validationResults || []).filter((item) => !item.blocking), [proposal]);
   const canApprove = blocking.length === 0 && proposal.status === "PROPOSED" && !approved;
 
   useEffect(() => {
@@ -203,7 +208,8 @@ function ReviewScreen({ proposal, approved, busy, onNewUpload, onReview, onAppro
         h(
           "div",
           { className: "review-status" },
-          h("span", { className: `status ${canApprove ? "ok" : "review"}` }, canApprove ? "Pronto para aprovar" : `${blocking.length} pendencia(s)`),
+          h("span", { className: `status ${canApprove ? "ok" : "review"}` }, canApprove ? "Pronto para aprovar" : countLabel(blocking.length, "ação pendente", "ações pendentes")),
+          warnings.length > 0 ? h("span", { className: "status warning" }, countLabel(warnings.length, "aviso", "avisos")) : null,
           h("button", { className: "button ghost", disabled: busy, onClick: onNewUpload }, "Novo upload"),
         ),
       ),
@@ -296,23 +302,101 @@ function ItemsGrid({ draft, setDraft, results }) {
 }
 
 function ValidationPanel({ results }) {
-  const blocking = results.filter((item) => item.blocking);
+  const issues = results.map(readableValidation).sort((a, b) => Number(b.blocking) - Number(a.blocking));
   return h(
     "section",
     { className: "validation-panel" },
-    h("h3", null, "Pendencias de validacao"),
-    blocking.length === 0
-      ? h("p", { className: "success" }, "Sem campos obrigatorios pendentes. A compra pode ser aprovada.")
-      : blocking.map((item) =>
+    h("h3", null, "Pontos para conferir"),
+    issues.length === 0
+      ? h("p", { className: "success" }, "Tudo certo para aprovar a compra.")
+      : issues.map((item) =>
           h(
             "div",
-            { key: `${item.code}-${item.field}`, className: "issue" },
-            h("strong", null, item.code),
-            h("span", null, item.message),
-            h("code", null, item.field),
+            { key: `${item.code}-${item.field}`, className: `issue ${item.blocking ? "blocking" : "warning"}` },
+            h("div", { className: "issue-header" }, h("strong", null, item.title), h("span", null, item.blocking ? "Precisa resolver" : "Apenas conferir")),
+            h("span", null, item.description),
+            item.detail ? h("code", null, item.detail) : null,
           ),
         ),
   );
+}
+
+function readableValidation(result) {
+  const field = readableField(result.field);
+  const messages = {
+    DOCUMENT_INCOMPLETE: {
+      title: "O documento parece ter mais páginas",
+      description: "A imagem indica que existe outra página. Confira se os itens desta compra estão todos na tabela antes de aprovar.",
+    },
+    HUMAN_REVIEW_REQUIRED: {
+      title: "Conferência humana necessária",
+      description: "Revise os dados extraídos da imagem e clique em Salvar alterações para liberar a aprovação.",
+    },
+    ITEM_TOTAL_MISMATCH: {
+      title: "Total de item para conferir",
+      description: `${field || "Um item"} não bate exatamente com quantidade x valor unitário. Ajuste se estiver errado ou siga se o valor da nota estiver correto.`,
+    },
+    PRODUCTS_TOTAL_MISMATCH: {
+      title: "Total de produtos para conferir",
+      description: "A soma dos itens extraídos não bate com o total de produtos informado no documento. Isso pode acontecer quando a foto não permite ler todas as linhas.",
+    },
+    GRAND_TOTAL_MISMATCH: {
+      title: "Total geral para conferir",
+      description: "O total geral calculado ficou diferente dos totais informados. Confira desconto, acréscimo, impostos e total da compra.",
+    },
+    SUPPLIER_NOT_IDENTIFIED: {
+      title: "Fornecedor não identificado",
+      description: "Informe o nome ou CNPJ/CPF do fornecedor antes de aprovar.",
+    },
+    PURCHASE_WITHOUT_ITEMS: {
+      title: "Nenhum item encontrado",
+      description: "A importação não encontrou itens de compra. Envie outro arquivo ou preencha os itens antes de aprovar.",
+    },
+    INVALID_QUANTITY: {
+      title: "Quantidade inválida",
+      description: `${field || "Um item"} está com quantidade vazia ou menor que zero.`,
+    },
+    INVALID_UNIT_COST: {
+      title: "Valor unitário inválido",
+      description: `${field || "Um item"} está com valor unitário negativo.`,
+    },
+  };
+  const fallback = {
+    title: "Ponto para conferir",
+    description: result.message || "Confira este dado antes de aprovar.",
+  };
+  const message = messages[result.code] || fallback;
+  return {
+    ...result,
+    title: message.title,
+    description: message.description,
+    detail: field,
+  };
+}
+
+function readableField(path) {
+  const normalized = normalizePath(path);
+  const itemMatch = normalized.match(/^items\[(\d+)\]\.(.+)$/);
+  if (itemMatch) {
+    return `Linha ${Number(itemMatch[1]) + 1}, ${readableFieldName(itemMatch[2])}`;
+  }
+  if (normalized === "sourceDocument.pageCount") return "Páginas do documento";
+  return readableFieldName(normalized);
+}
+
+function readableFieldName(path) {
+  const names = {
+    supplier: "Fornecedor",
+    "supplier.legalName": "Nome do fornecedor",
+    "supplier.documentNumber": "CNPJ/CPF do fornecedor",
+    documentNumber: "Número do documento",
+    "totals.productsTotal": "Total de produtos",
+    "totals.grandTotal": "Total geral",
+    quantity: "Quantidade",
+    unitCost: "Valor unitário",
+    totalCost: "Valor total",
+  };
+  return names[path] || "";
 }
 
 function ApprovalPanel({ approved }) {

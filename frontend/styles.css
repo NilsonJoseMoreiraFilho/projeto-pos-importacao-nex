@@ -249,6 +249,11 @@ select {
   color: #92400e;
 }
 
+.status.warning {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
 .grid {
   display: grid;
   gap: 16px;
@@ -452,8 +457,25 @@ th {
   padding: 10px;
 }
 
+.issue-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.issue-header span {
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  color: #7f1d1d;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
 .issue code {
-  color: #991b1b;
+  color: #7f1d1d;
   font-size: 12px;
 }
 
@@ -469,6 +491,11 @@ th {
 .issue.warning {
   border-left-color: #d97706;
   background: #fffbeb;
+}
+
+.issue.warning .issue-header span,
+.issue.warning code {
+  color: #92400e;
 }
 
 .empty {
