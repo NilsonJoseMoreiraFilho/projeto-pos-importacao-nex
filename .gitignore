@@ -1,7 +1,11 @@
 .codex-remote-attachments/
 artifacts/
+bin/
+out/
 *.tmp
 *.log
 backend/bin/
 backend/out/
 backend/coverage.out
+frontend/node_modules/
+frontend/dist/

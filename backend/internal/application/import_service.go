@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"projeto_pos/backend/internal/domain"
@@ -112,7 +114,7 @@ func NewReviewImportProposalService(repository PurchaseRepository) ReviewImportP
 	return ReviewImportProposalService{repository: repository}
 }
 
-func (s ReviewImportProposalService) Review(ctx context.Context, proposalID string, decisions []ReviewDecision) (ImportProposal, error) {
+func (s ReviewImportProposalService) Review(ctx context.Context, proposalID string, edits []ReviewEdit) (ImportProposal, error) {
 	if s.repository == nil {
 		return ImportProposal{}, errors.New("review service requires repository")
 	}
@@ -120,27 +122,16 @@ func (s ReviewImportProposalService) Review(ctx context.Context, proposalID stri
 	if err != nil {
 		return ImportProposal{}, err
 	}
-	for _, decision := range decisions {
-		for i, field := range proposal.ExtractedFields {
-			if field.FieldPath != decision.FieldPath {
-				continue
-			}
-			switch decision.Decision {
-			case ReviewDecisionAccept:
-				proposal.ExtractedFields[i].Status = FieldReviewed
-			case ReviewDecisionCorrect:
-				proposal.ExtractedFields[i].Status = FieldCorrected
-				proposal.ExtractedFields[i].NormalizedValue = decision.CorrectedValue
-				if err := applyCorrectedValue(&proposal.PurchaseDraft, decision.FieldPath, decision.CorrectedValue); err != nil {
-					return ImportProposal{}, err
-				}
-			case ReviewDecisionReject:
-				proposal.ExtractedFields[i].Status = FieldRejected
-			}
+	for _, edit := range edits {
+		if edit.FieldPath == "" {
+			return ImportProposal{}, errors.New("review edit requires fieldPath")
 		}
+		if err := applyEditedValue(&proposal.PurchaseDraft, edit.FieldPath, edit.Value); err != nil {
+			return ImportProposal{}, err
+		}
+		markFieldCorrected(proposal.ExtractedFields, edit.FieldPath, edit.Value)
 	}
 	proposal.ValidationResults = domain.ValidatePurchase(proposal.SourceDocument, proposal.PurchaseDraft, false)
-	proposal.ValidationResults = append(proposal.ValidationResults, validateReviewedFields(proposal.ExtractedFields)...)
 	proposal.Status = ProposalProposed
 	if domain.HasBlocking(proposal.ValidationResults) {
 		proposal.Status = ProposalNeedsReview
@@ -170,9 +161,6 @@ func (s ApprovePurchaseService) Approve(ctx context.Context, proposalID string, 
 	if domain.HasBlocking(proposal.ValidationResults) {
 		return domain.ApprovedPurchase{}, errors.New("proposal has blocking validation results")
 	}
-	if hasRejectedField(proposal.ExtractedFields) {
-		return domain.ApprovedPurchase{}, errors.New("proposal has rejected extracted fields")
-	}
 	approved := domain.ApprovedPurchase{
 		Purchase:   proposal.PurchaseDraft,
 		ApprovedBy: reviewer,
@@ -184,43 +172,183 @@ func (s ApprovePurchaseService) Approve(ctx context.Context, proposalID string, 
 	return approved, nil
 }
 
-func validateReviewedFields(fields []ExtractedField) []domain.ValidationResult {
-	var results []domain.ValidationResult
-	for _, field := range fields {
-		if field.Status == FieldRejected {
-			results = append(results, domain.ValidationResult{
-				Severity: domain.ValidationError,
-				Code:     "FIELD_REJECTED",
-				Field:    field.FieldPath,
-				Message:  "campo extraido foi rejeitado na revisao humana",
-				Blocking: true,
-			})
+func markFieldCorrected(fields []ExtractedField, fieldPath string, value any) {
+	for i, field := range fields {
+		if normalizePurchasePath(field.FieldPath) != normalizePurchasePath(fieldPath) {
+			continue
 		}
+		fields[i].Status = FieldCorrected
+		fields[i].NormalizedValue = value
 	}
-	return results
 }
 
-func hasRejectedField(fields []ExtractedField) bool {
-	for _, field := range fields {
-		if field.Status == FieldRejected {
-			return true
-		}
-	}
-	return false
-}
-
-func applyCorrectedValue(purchase *domain.Purchase, fieldPath string, value any) error {
-	switch fieldPath {
-	case "purchase.documentNumber":
+func applyEditedValue(purchase *domain.Purchase, fieldPath string, value any) error {
+	path := normalizePurchasePath(fieldPath)
+	switch path {
+	case "documentNumber":
 		purchase.DocumentNumber = fmt.Sprint(value)
-	case "purchase.supplier.legalName":
+	case "priceTable":
+		purchase.PriceTable = fmt.Sprint(value)
+	case "freightMode":
+		purchase.FreightMode = fmt.Sprint(value)
+	case "supplier.legalName":
 		purchase.Supplier.LegalName = fmt.Sprint(value)
-	case "purchase.supplier.documentNumber":
+	case "supplier.documentNumber":
 		purchase.Supplier.DocumentNumber = fmt.Sprint(value)
+	case "supplier.tradeName":
+		purchase.Supplier.TradeName = fmt.Sprint(value)
+	case "supplier.stateRegistration":
+		purchase.Supplier.StateRegistration = fmt.Sprint(value)
+	case "totals.productsTotal":
+		money, err := moneyFromAny(value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", fieldPath, err)
+		}
+		purchase.Totals.ProductsTotal = money
+	case "totals.discount":
+		money, err := moneyFromAny(value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", fieldPath, err)
+		}
+		purchase.Totals.Discount = money
+	case "totals.addition":
+		money, err := moneyFromAny(value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", fieldPath, err)
+		}
+		purchase.Totals.Addition = money
+	case "totals.grandTotal":
+		money, err := moneyFromAny(value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", fieldPath, err)
+		}
+		purchase.Totals.GrandTotal = money
 	default:
-		return nil
+		return applyItemEditedValue(purchase, path, value)
 	}
 	return nil
+}
+
+func applyItemEditedValue(purchase *domain.Purchase, path string, value any) error {
+	if !strings.HasPrefix(path, "items[") {
+		return nil
+	}
+	end := strings.Index(path, "]")
+	if end < len("items[") || end+2 > len(path) {
+		return fmt.Errorf("invalid item field path: %s", path)
+	}
+	index, err := strconv.Atoi(path[len("items["):end])
+	if err != nil {
+		return fmt.Errorf("invalid item index in field path %s: %w", path, err)
+	}
+	if index < 0 || index >= len(purchase.Items) {
+		return fmt.Errorf("item index out of range in field path: %s", path)
+	}
+	field := path[end+2:]
+	item := &purchase.Items[index]
+	switch field {
+	case "supplierProductCode":
+		item.SupplierProductCode = fmt.Sprint(value)
+	case "barcode":
+		item.Barcode = fmt.Sprint(value)
+	case "reference":
+		item.Reference = fmt.Sprint(value)
+	case "description":
+		item.Description = fmt.Sprint(value)
+	case "unit":
+		item.Unit = fmt.Sprint(value)
+	case "packageQuantity":
+		parsed, err := intFromAny(value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		item.PackageQuantity = parsed
+	case "quantity":
+		parsed, err := floatFromAny(value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		item.Quantity = parsed
+	case "unitCost":
+		money, err := moneyFromAny(value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		item.UnitCost = money
+	case "totalCost":
+		money, err := moneyFromAny(value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		item.TotalCost = money
+	case "matchedInternalProductId":
+		item.MatchedInternalProductID = fmt.Sprint(value)
+	default:
+		return fmt.Errorf("unsupported item field path: %s", path)
+	}
+	return nil
+}
+
+func normalizePurchasePath(path string) string {
+	path = strings.TrimSpace(path)
+	path = strings.TrimPrefix(path, "purchase.")
+	path = strings.TrimPrefix(path, "purchaseDraft.")
+	return path
+}
+
+func intFromAny(value any) (int, error) {
+	parsed, err := floatFromAny(value)
+	if err != nil {
+		return 0, err
+	}
+	return int(parsed), nil
+}
+
+func floatFromAny(value any) (float64, error) {
+	switch typed := value.(type) {
+	case float64:
+		return typed, nil
+	case float32:
+		return float64(typed), nil
+	case int:
+		return float64(typed), nil
+	case int64:
+		return float64(typed), nil
+	case jsonNumber:
+		return strconv.ParseFloat(string(typed), 64)
+	case string:
+		normalized := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(typed, "R$", ""), ".", ""))
+		normalized = strings.ReplaceAll(normalized, ",", ".")
+		if normalized == "" {
+			return 0, nil
+		}
+		return strconv.ParseFloat(normalized, 64)
+	default:
+		return 0, fmt.Errorf("expected numeric value, got %T", value)
+	}
+}
+
+type jsonNumber string
+
+func moneyFromAny(value any) (domain.Money, error) {
+	switch typed := value.(type) {
+	case map[string]any:
+		cents, ok := typed["cents"]
+		if !ok {
+			return domain.Money{}, errors.New("money object requires cents")
+		}
+		parsed, err := floatFromAny(cents)
+		if err != nil {
+			return domain.Money{}, err
+		}
+		return domain.Money{Cents: int64(parsed)}, nil
+	default:
+		parsed, err := floatFromAny(value)
+		if err != nil {
+			return domain.Money{}, err
+		}
+		return domain.Money{Cents: int64(parsed)}, nil
+	}
 }
 
 type ExportApprovedPurchaseService struct {

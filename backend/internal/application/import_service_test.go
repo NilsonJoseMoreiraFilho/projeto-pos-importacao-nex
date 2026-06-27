@@ -58,7 +58,7 @@ func TestApproveServiceApprovesValidProposal(t *testing.T) {
 	}
 }
 
-func TestReviewServiceCorrectsDraftAndRevalidates(t *testing.T) {
+func TestReviewServiceAppliesGridEditsAndRevalidates(t *testing.T) {
 	repository := newFakeRepository()
 	raw := invalidRawExtraction()
 	raw.ExtractedFields = []ExtractedField{
@@ -70,13 +70,12 @@ func TestReviewServiceCorrectsDraftAndRevalidates(t *testing.T) {
 		t.Fatalf("import failed: %v", err)
 	}
 
-	reviewed, err := NewReviewImportProposalService(repository).Review(context.Background(), proposal.ID, []ReviewDecision{
+	reviewed, err := NewReviewImportProposalService(repository).Review(context.Background(), proposal.ID, []ReviewEdit{
 		{
-			FieldPath:      "purchase.supplier.legalName",
-			Decision:       ReviewDecisionCorrect,
-			CorrectedValue: "Fornecedor Corrigido",
-			ReviewedBy:     "tester",
-			ReviewedAt:     time.Now().UTC(),
+			FieldPath: "purchase.supplier.legalName",
+			Value:     "Fornecedor Corrigido",
+			EditedBy:  "tester",
+			EditedAt:  time.Now().UTC(),
 		},
 	})
 	if err != nil {
@@ -90,11 +89,11 @@ func TestReviewServiceCorrectsDraftAndRevalidates(t *testing.T) {
 	}
 }
 
-func TestReviewServiceRejectedFieldBlocksApproval(t *testing.T) {
+func TestReviewServiceDoesNotRequireProductMatch(t *testing.T) {
 	repository := newFakeRepository()
 	raw := validRawExtraction()
 	raw.ExtractedFields = []ExtractedField{
-		{FieldPath: "purchase.documentNumber", Status: FieldLowConfidence},
+		{FieldPath: "purchase.items[0].matchedInternalProductId", Status: FieldLowConfidence},
 	}
 	service := NewImportPurchaseServiceWithDependencies(stubReader{raw: raw}, repository, nil)
 	proposal, err := service.Import(context.Background(), ImportPurchaseInput{})
@@ -102,23 +101,23 @@ func TestReviewServiceRejectedFieldBlocksApproval(t *testing.T) {
 		t.Fatalf("import failed: %v", err)
 	}
 
-	reviewed, err := NewReviewImportProposalService(repository).Review(context.Background(), proposal.ID, []ReviewDecision{
+	reviewed, err := NewReviewImportProposalService(repository).Review(context.Background(), proposal.ID, []ReviewEdit{
 		{
-			FieldPath:  "purchase.documentNumber",
-			Decision:   ReviewDecisionReject,
-			ReviewedBy: "tester",
-			ReviewedAt: time.Now().UTC(),
+			FieldPath: "purchase.items[0].matchedInternalProductId",
+			Value:     "",
+			EditedBy:  "tester",
+			EditedAt:  time.Now().UTC(),
 		},
 	})
 	if err != nil {
 		t.Fatalf("review failed: %v", err)
 	}
-	if reviewed.Status != ProposalNeedsReview {
-		t.Fatalf("expected rejected field to keep review needed, got %s", reviewed.Status)
+	if reviewed.Status != ProposalProposed {
+		t.Fatalf("expected missing product match to remain proposed, got %s with %#v", reviewed.Status, reviewed.ValidationResults)
 	}
 	_, err = NewApprovePurchaseService(repository).Approve(context.Background(), proposal.ID, "tester")
-	if err == nil {
-		t.Fatal("expected rejected field to block approval")
+	if err != nil {
+		t.Fatalf("missing product match should not block approval: %v", err)
 	}
 }
 

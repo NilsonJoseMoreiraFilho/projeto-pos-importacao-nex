@@ -1,0 +1,153 @@
+{
+    "sourceDocument":  {
+                           "id":  "doc-photo-11441701-p1",
+                           "fileName":  "1-Photo-1.jpg",
+                           "fileType":  "image/jpeg",
+                           "pageCount":  2,
+                           "currentPage":  2,
+                           "checksum":  "sample-photo-checksum",
+                           "storageLocation":  "local-sample",
+                           "qualityScore":  0.62,
+                           "detectedDocumentType":  "PHOTO",
+                           "observations":  [
+                                                "massa demonstrativa para Sprint 2"
+                                            ]
+                       },
+    "purchase":  {
+                     "id":  "purchase-draft-11441701",
+                     "supplier":  {
+                                      "id":  "supplier-ponto-aura",
+                                      "legalName":  "COMERCIO PONTO AURA CENTRAL LTDA",
+                                      "tradeName":  "Ponto Aura",
+                                      "documentNumber":  "",
+                                      "stateRegistration":  ""
+                                  },
+                     "documentNumber":  "11441701",
+                     "issueDate":  "2026-05-01T00:00:00Z",
+                     "sourceDocumentType":  "PHOTO",
+                     "priceTable":  "2-ATACADO",
+                     "freightMode":  "FOB",
+                     "items":  [
+                                   {
+                                       "lineNumber":  1,
+                                       "supplierProductCode":  "7904714110271",
+                                       "barcode":  "7904714110271",
+                                       "reference":  "1194101",
+                                       "description":  "BATOM LIQUIDO LUDURANA",
+                                       "unit":  "UNID",
+                                       "packageQuantity":  1,
+                                       "quantity":  36,
+                                       "unitCost":  {
+                                                        "cents":  580
+                                                    },
+                                       "totalCost":  {
+                                                         "cents":  20880
+                                                     },
+                                       "matchedInternalProductId":  ""
+                                   },
+                                   {
+                                       "lineNumber":  2,
+                                       "supplierProductCode":  "7908714107455",
+                                       "barcode":  "7908714107455",
+                                       "reference":  "402001",
+                                       "description":  "PO DE BANANA LUDURANA",
+                                       "unit":  "UNID",
+                                       "packageQuantity":  1,
+                                       "quantity":  12,
+                                       "unitCost":  {
+                                                        "cents":  445
+                                                    },
+                                       "totalCost":  {
+                                                         "cents":  5340
+                                                     },
+                                       "matchedInternalProductId":  ""
+                                   },
+                                   {
+                                       "lineNumber":  3,
+                                       "supplierProductCode":  "722713014432",
+                                       "barcode":  "722713014432",
+                                       "reference":  "143530",
+                                       "description":  "HIDRATANTE CORPORAL FLOWER LILY SOUL",
+                                       "unit":  "UNID",
+                                       "packageQuantity":  1,
+                                       "quantity":  12,
+                                       "unitCost":  {
+                                                        "cents":  570
+                                                    },
+                                       "totalCost":  {
+                                                         "cents":  6840
+                                                     },
+                                       "matchedInternalProductId":  ""
+                                   },
+                                   {
+                                       "lineNumber":  4,
+                                       "supplierProductCode":  "722713014418",
+                                       "barcode":  "722713014418",
+                                       "reference":  "1144001",
+                                       "description":  "HIDRATANTE CORPORAL BABASOUL 240ML SOUL",
+                                       "unit":  "UNID",
+                                       "packageQuantity":  1,
+                                       "quantity":  12,
+                                       "unitCost":  {
+                                                        "cents":  580
+                                                    },
+                                       "totalCost":  {
+                                                         "cents":  6960
+                                                     },
+                                       "matchedInternalProductId":  ""
+                                   }
+                               ],
+                     "totals":  {
+                                    "productsTotal":  {
+                                                          "cents":  40020
+                                                      },
+                                    "discount":  {
+                                                     "cents":  0
+                                                 },
+                                    "addition":  {
+                                                     "cents":  0
+                                                 },
+                                    "ipi":  {
+                                                "cents":  0
+                                            },
+                                    "taxSubstitution":  {
+                                                            "cents":  0
+                                                        },
+                                    "fcpSt":  {
+                                                  "cents":  0
+                                              },
+                                    "grandTotal":  {
+                                                       "cents":  40020
+                                                   }
+                                }
+                 },
+    "extractedFields":  [
+                            {
+                                "fieldPath":  "purchase.documentNumber",
+                                "rawText":  "Nro.: 11441701",
+                                "normalizedValue":  "11441701",
+                                "confidence":  0.91,
+                                "page":  1,
+                                "status":  "EXTRACTED"
+                            },
+                            {
+                                "fieldPath":  "purchase.issueDate",
+                                "rawText":  "Data Emissao: 01/05/2026",
+                                "normalizedValue":  "2026-05-01",
+                                "confidence":  0.86,
+                                "page":  1,
+                                "status":  "EXTRACTED"
+                            },
+                            {
+                                "fieldPath":  "sourceDocument.pageCount",
+                                "rawText":  "1 / 2",
+                                "normalizedValue":  "2",
+                                "confidence":  0.88,
+                                "page":  1,
+                                "status":  "LOW_CONFIDENCE"
+                            }
+                        ],
+    "extractorName":  "manual-json-sprint-1",
+    "extractorVersion":  "0.1.0",
+    "extractedAt":  "2026-06-18T12:00:00Z"
+}

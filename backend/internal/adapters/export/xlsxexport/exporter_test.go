@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/xuri/excelize/v2"
+
 	"projeto_pos/backend/internal/domain"
 )
 
@@ -17,6 +19,9 @@ func TestExportApprovedPurchaseWritesXLSX(t *testing.T) {
 			Items: []domain.PurchaseItem{
 				{
 					LineNumber:               1,
+					SupplierProductCode:      "COD-1",
+					Barcode:                  "789",
+					Reference:                "REF-1",
 					Description:              "Produto A",
 					Unit:                     "UNID",
 					Quantity:                 1,
@@ -36,5 +41,29 @@ func TestExportApprovedPurchaseWritesXLSX(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected xlsx file: %v", err)
+	}
+	file, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatalf("open xlsx: %v", err)
+	}
+	defer file.Close()
+	headers, err := file.GetRows("purchase_items")
+	if err != nil {
+		t.Fatalf("read sheet: %v", err)
+	}
+	if len(headers) == 0 {
+		t.Fatal("expected header row")
+	}
+	for _, header := range headers[0] {
+		if header == "matched_internal_product_id" {
+			t.Fatal("xlsx should not expose internal NEX product match column")
+		}
+	}
+	code, err := file.GetCellValue("purchase_items", "D2")
+	if err != nil {
+		t.Fatalf("read supplier product code: %v", err)
+	}
+	if code != "COD-1" {
+		t.Fatalf("unexpected supplier product code: %s", code)
 	}
 }

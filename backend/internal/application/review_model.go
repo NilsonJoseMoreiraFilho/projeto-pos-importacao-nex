@@ -2,20 +2,11 @@ package application
 
 import "time"
 
-type ReviewDecisionType string
-
-const (
-	ReviewDecisionAccept  ReviewDecisionType = "ACCEPT"
-	ReviewDecisionCorrect ReviewDecisionType = "CORRECT"
-	ReviewDecisionReject  ReviewDecisionType = "REJECT"
-)
-
-type ReviewDecision struct {
-	FieldPath      string             `json:"fieldPath"`
-	Decision       ReviewDecisionType `json:"decision"`
-	CorrectedValue any                `json:"correctedValue,omitempty"`
-	ReviewedBy     string             `json:"reviewedBy"`
-	ReviewedAt     time.Time          `json:"reviewedAt"`
+type ReviewEdit struct {
+	FieldPath string    `json:"fieldPath"`
+	Value     any       `json:"value"`
+	EditedBy  string    `json:"editedBy"`
+	EditedAt  time.Time `json:"editedAt"`
 }
 
 type ExportStatus string
