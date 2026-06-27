@@ -10,8 +10,7 @@
                            "qualityScore":  0.62,
                            "detectedDocumentType":  "PHOTO",
                            "observations":  [
-                                                "massa demonstrativa para Sprint 2",
-                                                "item 2 sem produto NEX para validar destaque em vermelho"
+                                                "massa demonstrativa para Sprint 2"
                                             ]
                        },
     "purchase":  {
@@ -44,7 +43,7 @@
                                        "totalCost":  {
                                                          "cents":  20880
                                                      },
-                                       "matchedInternalProductId":  "prod-batom-liquido-ludurana"
+                                       "matchedInternalProductId":  ""
                                    },
                                    {
                                        "lineNumber":  2,
@@ -78,7 +77,7 @@
                                        "totalCost":  {
                                                          "cents":  6840
                                                      },
-                                       "matchedInternalProductId":  "prod-hidratante-flower-lily"
+                                       "matchedInternalProductId":  ""
                                    },
                                    {
                                        "lineNumber":  4,
@@ -95,7 +94,7 @@
                                        "totalCost":  {
                                                          "cents":  6960
                                                      },
-                                       "matchedInternalProductId":  "prod-hidratante-babasoul"
+                                       "matchedInternalProductId":  ""
                                    }
                                ],
                      "totals":  {
@@ -144,14 +143,6 @@
                                 "rawText":  "1 / 2",
                                 "normalizedValue":  "2",
                                 "confidence":  0.88,
-                                "page":  1,
-                                "status":  "LOW_CONFIDENCE"
-                            },
-                            {
-                                "fieldPath":  "purchase.items[1].matchedInternalProductId",
-                                "rawText":  "",
-                                "normalizedValue":  "",
-                                "confidence":  0.2,
                                 "page":  1,
                                 "status":  "LOW_CONFIDENCE"
                             }

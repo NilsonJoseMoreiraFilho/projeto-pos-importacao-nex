@@ -83,11 +83,18 @@ func TestValidatePurchaseBlocksUnknownSupplier(t *testing.T) {
 	assertCode(t, results, "SUPPLIER_NOT_IDENTIFIED")
 }
 
-func TestValidatePurchaseBlocksMissingProductMatch(t *testing.T) {
+func TestValidatePurchaseDoesNotBlockMissingProductMatch(t *testing.T) {
 	source, purchase := validPurchase()
 	purchase.Items[0].MatchedInternalProductID = ""
 	results := ValidatePurchase(source, purchase, false)
-	assertCode(t, results, "PRODUCT_MATCH_REQUIRED")
+	for _, result := range results {
+		if result.Code == "PRODUCT_MATCH_REQUIRED" {
+			t.Fatalf("product match should not block validation: %#v", results)
+		}
+	}
+	if HasBlocking(results) {
+		t.Fatalf("expected missing product match to remain valid, got %#v", results)
+	}
 }
 
 func assertCode(t *testing.T, results []ValidationResult, code string) {

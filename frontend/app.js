@@ -271,7 +271,7 @@ function ItemsGrid({ draft, setDraft, results }) {
       h(
         "thead",
         null,
-        h("tr", null, ["Linha", "Codigo", "Referencia", "Descricao", "Unid.", "Qtd.", "Vlr. Unit.", "Vlr. Total", "Produto NEX"].map((header) => h("th", { key: header }, header))),
+        h("tr", null, ["Linha", "Codigo", "Referencia", "Descricao", "Unid.", "Qtd.", "Vlr. Unit.", "Vlr. Total"].map((header) => h("th", { key: header }, header))),
       ),
       h(
         "tbody",
@@ -288,7 +288,6 @@ function ItemsGrid({ draft, setDraft, results }) {
             h("td", null, numberInput(item.quantity, (value) => setDraft(updateItem(draft, index, "quantity", value)), isInvalid(results, `purchase.items[${index}].quantity`))),
             h("td", null, moneyInput(item.unitCost, (value) => setDraft(updateItem(draft, index, "unitCost", value)), isInvalid(results, `purchase.items[${index}].unitCost`))),
             h("td", null, moneyInput(item.totalCost, (value) => setDraft(updateItem(draft, index, "totalCost", value)), isInvalid(results, `purchase.items[${index}].totalCost`))),
-            h("td", null, cellInput(item.matchedInternalProductId || "", (value) => setDraft(updateItem(draft, index, "matchedInternalProductId", value)), isInvalid(results, `purchase.items[${index}].matchedInternalProductId`))),
           ),
         ),
       ),
@@ -373,7 +372,6 @@ function buildEdits(draft) {
       edit(`purchase.items[${index}].quantity`, item.quantity || 0),
       edit(`purchase.items[${index}].unitCost`, item.unitCost || { cents: 0 }),
       edit(`purchase.items[${index}].totalCost`, item.totalCost || { cents: 0 }),
-      edit(`purchase.items[${index}].matchedInternalProductId`, item.matchedInternalProductId || ""),
     );
   });
   return edits;

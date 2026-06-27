@@ -27,7 +27,7 @@ O fluxo visual fica separado em duas telas: uma tela dedicada somente ao upload/
 7. Frontend navega para a tela 2, dedicada a validacao.
 8. Frontend exibe uma tabela editavel em formato de planilha:
    - uma linha por item importado;
-   - colunas de codigo, referencia, descricao, unidade, quantidade, valor unitario, valor total e produto interno;
+   - colunas de codigo, referencia, descricao, unidade, quantidade, valor unitario e valor total;
    - cabecalho da compra em campos editaveis;
    - campos obrigatorios vazios destacados em vermelho.
 9. Operadora edita diretamente as celulas incorretas ou vazias.
@@ -47,6 +47,7 @@ O fluxo visual fica separado em duas telas: uma tela dedicada somente ao upload/
 - Aprovacao fica na tela de validacao, na mesma tela da tabela.
 - Aprovacao deve acionar a saida/integracao por `ManagementSystemExporterPort`.
 - Para a POC, a saida pode ser CSV/XLSX ou adapter simulado enquanto a integracao real com NEX nao estiver confirmada.
+- Vinculo item a item com produto interno/NEX nao e obrigatorio nesta sprint e nao bloqueia aprovacao.
 
 ## Contrato HTTP proposto
 
@@ -104,7 +105,7 @@ Ordem de resolucao do `imageocr`:
 2. Usa OpenAI Vision, quando `OPENAI_API_KEY` existir.
 3. Usa JSON demonstrativo, quando nao houver chave.
 
-Mesmo com IA real, a proposta normalmente entra em revisao humana porque produto NEX, totais e campos de baixa confianca ainda precisam ser confirmados.
+Mesmo com IA real, a proposta pode entrar em revisao humana por totais divergentes, documento incompleto, campos obrigatorios ausentes ou campos de baixa confianca. Vinculo com produto interno/NEX nao bloqueia esta sprint.
 
 ## Escopo explicitamente fora da Sprint 2
 

@@ -13,7 +13,7 @@ flowchart TB
     pdf --> proposta
     ocr --> proposta
 
-    proposta --> validar["Validar fornecedor, itens, totais, paginas e produto NEX"]
+    proposta --> validar["Validar fornecedor, itens, totais e paginas"]
     validar --> telaValidacao["Tela 2: Validacao em grade editavel"]
 
     telaValidacao --> tabela["Exibir cabecalho e itens como planilha"]

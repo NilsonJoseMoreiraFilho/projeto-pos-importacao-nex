@@ -47,9 +47,6 @@ func ValidatePurchase(source SourceDocument, purchase Purchase, requiresHumanRev
 		if !item.TotalCost.WithinCents(expectedTotal, 1) {
 			results = append(results, errorResult("ITEM_TOTAL_MISMATCH", field+".totalCost", "total do item diverge de quantidade x valor unitário"))
 		}
-		if item.MatchedInternalProductID == "" {
-			results = append(results, errorResult("PRODUCT_MATCH_REQUIRED", field+".matchedInternalProductId", "item sem produto interno correspondente"))
-		}
 		sum = sum.Add(item.TotalCost)
 	}
 

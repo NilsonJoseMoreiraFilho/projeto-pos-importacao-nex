@@ -224,7 +224,7 @@ Preserve uma linha por item visivel.
 Nao substitua produtos ilegíveis por produtos parecidos.
 Nao use conhecimento geral para completar descricao, codigo ou referencia.
 Se a tabela estiver ilegivel, retorne menos itens com warnings em vez de inventar linhas.
-Nao invente produto interno NEX; deixe matchedInternalProductId vazio quando nao souber.`)
+Nao invente produto interno NEX; esta sprint nao exige vinculo item a item com cadastro interno.`)
 }
 
 type openAIResponsesRequest struct {

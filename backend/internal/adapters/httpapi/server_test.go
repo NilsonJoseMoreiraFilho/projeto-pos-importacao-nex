@@ -74,7 +74,7 @@ func TestReviewEditsAndApproveExportsPurchase(t *testing.T) {
 		t.Fatalf("decode proposal: %v", err)
 	}
 
-	reviewBody := bytes.NewBufferString(`{"edits":[{"fieldPath":"purchase.items[0].matchedInternalProductId","value":"prod-editado","editedBy":"tester"}]}`)
+	reviewBody := bytes.NewBufferString(`{"edits":[{"fieldPath":"purchase.documentNumber","value":"11441701","editedBy":"tester"}]}`)
 	reviewResp, err := http.Post(server.URL+"/api/imports/"+proposal.ID+"/review", "application/json", reviewBody)
 	if err != nil {
 		t.Fatalf("post review: %v", err)

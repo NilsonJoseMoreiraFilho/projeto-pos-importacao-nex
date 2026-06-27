@@ -89,7 +89,7 @@ func TestReviewServiceAppliesGridEditsAndRevalidates(t *testing.T) {
 	}
 }
 
-func TestReviewServiceKeepsProposalBlockedWhenRequiredCellIsEmpty(t *testing.T) {
+func TestReviewServiceDoesNotRequireProductMatch(t *testing.T) {
 	repository := newFakeRepository()
 	raw := validRawExtraction()
 	raw.ExtractedFields = []ExtractedField{
@@ -112,12 +112,12 @@ func TestReviewServiceKeepsProposalBlockedWhenRequiredCellIsEmpty(t *testing.T) 
 	if err != nil {
 		t.Fatalf("review failed: %v", err)
 	}
-	if reviewed.Status != ProposalNeedsReview {
-		t.Fatalf("expected missing required cell to keep review needed, got %s", reviewed.Status)
+	if reviewed.Status != ProposalProposed {
+		t.Fatalf("expected missing product match to remain proposed, got %s with %#v", reviewed.Status, reviewed.ValidationResults)
 	}
 	_, err = NewApprovePurchaseService(repository).Approve(context.Background(), proposal.ID, "tester")
-	if err == nil {
-		t.Fatal("expected missing required cell to block approval")
+	if err != nil {
+		t.Fatalf("missing product match should not block approval: %v", err)
 	}
 }
 

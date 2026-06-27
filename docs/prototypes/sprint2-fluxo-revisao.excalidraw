@@ -1448,12 +1448,12 @@
                          "locked":  false,
                          "fontSize":  13,
                          "fontFamily":  1,
-                         "text":  "Produto NEX",
-                         "rawText":  "Produto NEX",
+                         "text":  "Observacao",
+                         "rawText":  "Observacao",
                          "textAlign":  "left",
                          "verticalAlign":  "top",
                          "containerId":  null,
-                         "originalText":  "Produto NEX",
+                         "originalText":  "Observacao",
                          "lineHeight":  1.25
                      },
                      {
@@ -2442,12 +2442,12 @@
                          "locked":  false,
                          "fontSize":  11,
                          "fontFamily":  1,
-                         "text":  "obrigatorio",
-                         "rawText":  "obrigatorio",
+                         "text":  "opcional",
+                         "rawText":  "opcional",
                          "textAlign":  "left",
                          "verticalAlign":  "top",
                          "containerId":  null,
-                         "originalText":  "obrigatorio",
+                         "originalText":  "opcional",
                          "lineHeight":  1.25
                      },
                      {
@@ -3010,12 +3010,12 @@
                          "locked":  false,
                          "fontSize":  15,
                          "fontFamily":  1,
-                         "text":  "Pendencias: campos obrigatorios vazios aparecem em vermelho",
-                         "rawText":  "Pendencias: campos obrigatorios vazios aparecem em vermelho",
+                         "text":  "Pendencias: campos opcionals vazios aparecem em vermelho",
+                         "rawText":  "Pendencias: campos opcionals vazios aparecem em vermelho",
                          "textAlign":  "left",
                          "verticalAlign":  "top",
                          "containerId":  null,
-                         "originalText":  "Pendencias: campos obrigatorios vazios aparecem em vermelho",
+                         "originalText":  "Pendencias: campos opcionals vazios aparecem em vermelho",
                          "lineHeight":  1.25
                      },
                      {
@@ -3707,12 +3707,12 @@
                          "locked":  false,
                          "fontSize":  12,
                          "fontFamily":  1,
-                         "text":  "obrigatorios",
-                         "rawText":  "obrigatorios",
+                         "text":  "opcionals",
+                         "rawText":  "opcionals",
                          "textAlign":  "center",
                          "verticalAlign":  "middle",
                          "containerId":  null,
-                         "originalText":  "obrigatorios",
+                         "originalText":  "opcionals",
                          "lineHeight":  1.25
                      },
                      {
