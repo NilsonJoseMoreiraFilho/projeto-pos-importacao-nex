@@ -207,6 +207,7 @@ function ReviewScreen({ proposal, approved, busy, onNewUpload, onReview, onAppro
           h("button", { className: "button ghost", disabled: busy, onClick: onNewUpload }, "Novo upload"),
         ),
       ),
+      h(SourcePanel, { proposal }),
       h(HeaderGrid, { draft, setDraft, results: proposal.validationResults || [] }),
       h(ItemsGrid, { draft, setDraft, results: proposal.validationResults || [] }),
       h(ValidationPanel, { results: proposal.validationResults || [] }),
@@ -218,6 +219,29 @@ function ReviewScreen({ proposal, approved, busy, onNewUpload, onReview, onAppro
       ),
     ),
     approved ? h(ApprovalPanel, { approved }) : null,
+  );
+}
+
+function SourcePanel({ proposal }) {
+  const observations = proposal.sourceDocument?.observations || [];
+  const isOpenAI = observations.some((item) => String(item).toLowerCase().includes("openai"));
+  const isFallback = observations.some((item) => String(item).toLowerCase().includes("fallback"));
+  const label = isOpenAI ? "Processado por OpenAI Vision" : isFallback ? "Fallback demonstrativo" : "Origem estruturada";
+  const tone = isOpenAI ? "ai" : isFallback ? "demo" : "structured";
+
+  return h(
+    "section",
+    { className: `source-panel ${tone}` },
+    h("div", null, h("strong", null, label), h("span", null, proposal.sourceDocument?.fileName || "documento enviado")),
+    h(
+      "small",
+      null,
+      isOpenAI
+        ? "Dados extraidos da imagem por IA. Revise com atencao: a IA pode errar ou inventar linhas quando a foto estiver ruim."
+        : isFallback
+          ? "Dados ficticios carregados para demonstracao do fluxo."
+          : "Dados carregados de JSON/XLSX/sidecar estruturado.",
+    ),
   );
 }
 

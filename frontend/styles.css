@@ -277,6 +277,47 @@ select {
   gap: 10px;
 }
 
+.source-panel {
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.source-panel.ai {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.source-panel.demo {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.source-panel.structured {
+  background: #f8fafc;
+  border-color: #e5e7eb;
+}
+
+.source-panel strong,
+.source-panel span,
+.source-panel small {
+  display: block;
+}
+
+.source-panel strong {
+  font-size: 13px;
+}
+
+.source-panel span,
+.source-panel small {
+  color: #475569;
+  font-size: 12px;
+}
+
 .muted {
   color: #6b7280;
   font-size: 13px;

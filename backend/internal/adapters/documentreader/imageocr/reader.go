@@ -221,6 +221,9 @@ Responda exclusivamente com JSON valido no schema solicitado.
 Use strings vazias quando nao conseguir ler um campo.
 Use valores numericos em reais, nao em centavos.
 Preserve uma linha por item visivel.
+Nao substitua produtos ilegíveis por produtos parecidos.
+Nao use conhecimento geral para completar descricao, codigo ou referencia.
+Se a tabela estiver ilegivel, retorne menos itens com warnings em vez de inventar linhas.
 Nao invente produto interno NEX; deixe matchedInternalProductId vazio quando nao souber.`)
 }
 
