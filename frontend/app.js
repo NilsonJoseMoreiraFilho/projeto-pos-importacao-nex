@@ -140,7 +140,7 @@ function UploadScreen({ busy, onUpload, onDemo }) {
         "div",
         { className: "upload-dropzone" },
         h("strong", null, file ? file.name : "Escolha um arquivo para processar"),
-        h("span", null, "JSON controlado, XLSX, PDF ou imagem com sidecar OCR"),
+        h("span", null, "JSON controlado, XLSX, PDF ou imagem com IA/OCR"),
         h("input", { type: "file", onChange: (event) => setFile(event.target.files[0] || null) }),
       ),
       h(

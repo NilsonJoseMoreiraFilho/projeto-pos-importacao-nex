@@ -6,7 +6,7 @@ flowchart TB
     reader -->|JSON controlado| manual["ManualJsonDocumentReader"]
     reader -->|XLSX| xlsx["XlsxDocumentReader"]
     reader -->|PDF| pdf["PdfDocumentReader / sidecar"]
-    reader -->|Foto| ocr["ImageOcrDocumentReader / sidecar OCR"]
+    reader -->|Foto| ocr["ImageOcrDocumentReader / OpenAI Vision ou sidecar"]
 
     manual --> proposta["Gerar ImportProposal"]
     xlsx --> proposta

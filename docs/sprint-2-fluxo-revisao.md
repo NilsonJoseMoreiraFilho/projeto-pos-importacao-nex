@@ -21,7 +21,7 @@ O fluxo visual fica separado em duas telas: uma tela dedicada somente ao upload/
    - JSON controlado para massa demonstrativa;
    - XLSX para planilhas de fornecedor;
    - PDF sidecar para PDFs enquanto nao houver parser/OCR real;
-   - imagem/OCR sidecar para fotos enquanto nao houver OCR real.
+   - imagem via `imageocr`, usando OpenAI Vision quando `OPENAI_API_KEY` estiver configurada, sidecar `.ocr.json` quando existir, ou fallback demonstrativo sem chave.
 5. Backend cria uma `ImportProposal`.
 6. Backend executa validacoes de fornecedor, itens, totais, pagina faltante e campos obrigatorios.
 7. Frontend navega para a tela 2, dedicada a validacao.
@@ -90,9 +90,25 @@ Confirma a importacao revisada e aciona a saida/integracao configurada.
 
 Resposta: `ApprovedPurchase`.
 
+## Configuracao de IA para imagem
+
+Para testar extracao real de foto por IA:
+
+1. Configurar `OPENAI_API_KEY` no ambiente do backend.
+2. Opcionalmente configurar `OPENAI_VISION_MODEL`; o padrao atual do projeto e `gpt-4o-mini`.
+3. Subir uma imagem usando `reader=imageocr`.
+
+Ordem de resolucao do `imageocr`:
+
+1. Usa sidecar `<imagem>.ocr.json`, quando existir.
+2. Usa OpenAI Vision, quando `OPENAI_API_KEY` existir.
+3. Usa JSON demonstrativo, quando nao houver chave.
+
+Mesmo com IA real, a proposta normalmente entra em revisao humana porque produto NEX, totais e campos de baixa confianca ainda precisam ser confirmados.
+
 ## Escopo explicitamente fora da Sprint 2
 
-- OCR real em producao.
+- OCR/IA com acuracia produtiva garantida.
 - Login/autenticacao.
 - Integracao real com NEX sem confirmacao de API/modelo oficial.
 - Persistencia definitiva em banco.
