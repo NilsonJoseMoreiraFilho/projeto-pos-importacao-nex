@@ -6,6 +6,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/draw"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"os"
@@ -120,6 +124,11 @@ func (c OpenAIClient) Extract(ctx context.Context, imagePath string) (applicatio
 		return application.RawDocumentExtraction{}, err
 	}
 	mimeType := mimeTypeForImage(imagePath)
+	userContent := []openAIContent{
+		{Type: "input_text", Text: "Extraia os dados deste pedido de compra/venda fotografado. A tabela de itens costuma ter muitas linhas; percorra do primeiro item ate a linha anterior a Total Produtos e responda apenas no JSON do schema. Use a imagem completa para cabecalho/totais e os recortes para ler a tabela de itens."},
+	}
+	userContent = append(userContent, imageContents(image, mimeType)...)
+
 	requestBody := openAIResponsesRequest{
 		Model:           c.Model,
 		MaxOutputTokens: 12000,
@@ -131,11 +140,8 @@ func (c OpenAIClient) Extract(ctx context.Context, imagePath string) (applicatio
 				},
 			},
 			{
-				Role: "user",
-				Content: []openAIContent{
-					{Type: "input_text", Text: "Extraia os dados deste pedido de compra/venda fotografado. A tabela de itens costuma ter muitas linhas; percorra do primeiro item ate a linha anterior a Total Produtos e responda apenas no JSON do schema."},
-					{Type: "input_image", ImageURL: fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(image))},
-				},
+				Role:    "user",
+				Content: userContent,
 			},
 		},
 		Text: openAIText{
@@ -181,6 +187,49 @@ func (c OpenAIClient) Extract(ctx context.Context, imagePath string) (applicatio
 	if err := json.Unmarshal([]byte(content), &extracted); err != nil {
 		return application.RawDocumentExtraction{}, fmt.Errorf("parse openai extraction JSON: %w: %s", err, content)
 	}
+	if extractionLooksPartial(extracted) {
+		requestBody.Input[1].Content[0].Text = fullTableRetryPrompt()
+		payload, err = json.Marshal(requestBody)
+		if err != nil {
+			return application.RawDocumentExtraction{}, err
+		}
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint, bytes.NewReader(payload))
+		if err != nil {
+			return application.RawDocumentExtraction{}, err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err = httpClient.Do(req)
+		if err != nil {
+			return application.RawDocumentExtraction{}, err
+		}
+		defer resp.Body.Close()
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return application.RawDocumentExtraction{}, err
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return application.RawDocumentExtraction{}, fmt.Errorf("openai extraction retry failed with status %d: %s", resp.StatusCode, string(body))
+		}
+		response = openAIResponsesResponse{}
+		if err := json.Unmarshal(body, &response); err != nil {
+			return application.RawDocumentExtraction{}, err
+		}
+		content = response.OutputText()
+		if strings.TrimSpace(content) == "" {
+			return application.RawDocumentExtraction{}, fmt.Errorf("openai extraction retry returned empty output")
+		}
+		var retry aiPurchaseExtraction
+		if err := json.Unmarshal([]byte(content), &retry); err != nil {
+			return application.RawDocumentExtraction{}, fmt.Errorf("parse openai extraction retry JSON: %w: %s", err, content)
+		}
+		if len(retry.Items) >= len(extracted.Items) {
+			retry.Warnings = append(retry.Warnings, "extracao reprocessada para capturar a tabela completa")
+			extracted = retry
+		} else {
+			extracted.Warnings = append(extracted.Warnings, "extracao parece parcial mesmo apos reprocessamento")
+		}
+	}
 	raw := extracted.toRawDocumentExtraction(imagePath)
 	raw.SourceDocument.Observations[0] = fmt.Sprintf("extracao real por OpenAI Vision (%s)", c.Model)
 	return raw, nil
@@ -218,6 +267,71 @@ func mimeTypeForImage(path string) string {
 	}
 }
 
+func imageContents(source []byte, mimeType string) []openAIContent {
+	contents := []openAIContent{
+		{Type: "input_text", Text: "Imagem completa do documento."},
+		{Type: "input_image", ImageURL: dataURL(mimeType, source), Detail: "high"},
+	}
+	for _, crop := range tableCrops(source) {
+		contents = append(contents,
+			openAIContent{Type: "input_text", Text: crop.Label},
+			openAIContent{Type: "input_image", ImageURL: dataURL("image/jpeg", crop.Bytes), Detail: "high"},
+		)
+	}
+	return contents
+}
+
+type tableCrop struct {
+	Label string
+	Bytes []byte
+}
+
+func tableCrops(source []byte) []tableCrop {
+	decoded, _, err := image.Decode(bytes.NewReader(source))
+	if err != nil {
+		return nil
+	}
+	bounds := decoded.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	if width < 600 || height < 600 {
+		return nil
+	}
+	regions := []struct {
+		label string
+		from  float64
+		to    float64
+	}{
+		{label: "Recorte ampliado da parte superior da tabela de itens.", from: 0.36, to: 0.56},
+		{label: "Recorte ampliado da parte central da tabela de itens.", from: 0.49, to: 0.69},
+		{label: "Recorte ampliado da parte inferior da tabela de itens.", from: 0.62, to: 0.82},
+	}
+	crops := make([]tableCrop, 0, len(regions))
+	for _, region := range regions {
+		rect := image.Rect(
+			bounds.Min.X,
+			bounds.Min.Y+int(float64(height)*region.from),
+			bounds.Min.X+width,
+			bounds.Min.Y+int(float64(height)*region.to),
+		).Intersect(bounds)
+		if rect.Empty() {
+			continue
+		}
+		dst := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
+		draw.Draw(dst, dst.Bounds(), decoded, rect.Min, draw.Src)
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 92}); err != nil {
+			continue
+		}
+		crops = append(crops, tableCrop{Label: region.label, Bytes: buf.Bytes()})
+	}
+	return crops
+}
+
+func dataURL(mimeType string, content []byte) string {
+	return fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(content))
+}
+
 func extractionSystemPrompt() string {
 	return strings.TrimSpace(`Voce extrai dados de pedidos de compra/venda fotografados para importacao em sistema de estoque.
 Responda exclusivamente com JSON valido no schema solicitado.
@@ -232,6 +346,52 @@ Nao substitua produtos ilegíveis por produtos parecidos.
 Nao use conhecimento geral para completar descricao, codigo ou referencia.
 Se a tabela estiver ilegivel, retorne menos itens com warnings em vez de inventar linhas.
 Nao invente produto interno NEX; esta sprint nao exige vinculo item a item com cadastro interno.`)
+}
+
+func fullTableRetryPrompt() string {
+	return strings.TrimSpace(`A extracao anterior pareceu parcial. Releia a imagem com foco apenas na tabela de itens.
+Use os recortes ampliados da tabela para ler as linhas pequenas; eles se sobrepoem, entao deduplique linhas repetidas.
+Transcreva todas as linhas visiveis entre o cabecalho "Codigo / Referencia / Descricao / Unid. / Embal. / Qtde. / Vl.Unit. / Vl.Total" e a caixa "Total Produtos".
+Nao faca amostragem. Nao pule linhas. Nao use numeros de linha impressos ou inferidos; preencha lineNumber em sequencia 1, 2, 3...
+Se algum codigo ou descricao estiver parcialmente ilegivel, ainda preserve a linha com o trecho legivel e valores de quantidade/preco/total quando visiveis.
+Retorne o JSON completo no schema solicitado.`)
+}
+
+func extractionLooksPartial(extracted aiPurchaseExtraction) bool {
+	if len(extracted.Items) == 0 {
+		return false
+	}
+	if len(extracted.Items) < 35 && extracted.Totals.ProductsTotal > 1000 {
+		return true
+	}
+	for _, warning := range extracted.Warnings {
+		normalized := strings.ToLower(warning)
+		if len(extracted.Items) < 35 && (strings.Contains(normalized, "parcial") || strings.Contains(normalized, "partial")) {
+			return true
+		}
+	}
+	if hasLargeLineNumberGap(extracted.Items) {
+		return true
+	}
+	sum := 0.0
+	for _, item := range extracted.Items {
+		sum += item.TotalCost
+	}
+	return len(extracted.Items) < 30 && extracted.Totals.ProductsTotal > 0 && sum > 0 && sum < extracted.Totals.ProductsTotal*0.70
+}
+
+func hasLargeLineNumberGap(items []aiPurchaseItemExtraction) bool {
+	previous := 0
+	for _, item := range items {
+		if item.LineNumber <= 0 {
+			continue
+		}
+		if previous > 0 && item.LineNumber-previous > 3 {
+			return true
+		}
+		previous = item.LineNumber
+	}
+	return false
 }
 
 type openAIResponsesRequest struct {
@@ -250,6 +410,7 @@ type openAIContent struct {
 	Type     string `json:"type"`
 	Text     string `json:"text,omitempty"`
 	ImageURL string `json:"image_url,omitempty"`
+	Detail   string `json:"detail,omitempty"`
 }
 
 type openAIText struct {
@@ -284,25 +445,14 @@ type aiPurchaseExtraction struct {
 		DocumentNumber    string `json:"documentNumber"`
 		StateRegistration string `json:"stateRegistration"`
 	} `json:"supplier"`
-	DocumentNumber string `json:"documentNumber"`
-	IssueDate      string `json:"issueDate"`
-	PriceTable     string `json:"priceTable"`
-	FreightMode    string `json:"freightMode"`
-	PageCount      int    `json:"pageCount"`
-	CurrentPage    int    `json:"currentPage"`
-	Items          []struct {
-		LineNumber          int     `json:"lineNumber"`
-		SupplierProductCode string  `json:"supplierProductCode"`
-		Barcode             string  `json:"barcode"`
-		Reference           string  `json:"reference"`
-		Description         string  `json:"description"`
-		Unit                string  `json:"unit"`
-		PackageQuantity     int     `json:"packageQuantity"`
-		Quantity            float64 `json:"quantity"`
-		UnitCost            float64 `json:"unitCost"`
-		TotalCost           float64 `json:"totalCost"`
-	} `json:"items"`
-	Totals struct {
+	DocumentNumber string                     `json:"documentNumber"`
+	IssueDate      string                     `json:"issueDate"`
+	PriceTable     string                     `json:"priceTable"`
+	FreightMode    string                     `json:"freightMode"`
+	PageCount      int                        `json:"pageCount"`
+	CurrentPage    int                        `json:"currentPage"`
+	Items          []aiPurchaseItemExtraction `json:"items"`
+	Totals         struct {
 		ProductsTotal   float64 `json:"productsTotal"`
 		Discount        float64 `json:"discount"`
 		Addition        float64 `json:"addition"`
@@ -312,6 +462,19 @@ type aiPurchaseExtraction struct {
 		GrandTotal      float64 `json:"grandTotal"`
 	} `json:"totals"`
 	Warnings []string `json:"warnings"`
+}
+
+type aiPurchaseItemExtraction struct {
+	LineNumber          int     `json:"lineNumber"`
+	SupplierProductCode string  `json:"supplierProductCode"`
+	Barcode             string  `json:"barcode"`
+	Reference           string  `json:"reference"`
+	Description         string  `json:"description"`
+	Unit                string  `json:"unit"`
+	PackageQuantity     int     `json:"packageQuantity"`
+	Quantity            float64 `json:"quantity"`
+	UnitCost            float64 `json:"unitCost"`
+	TotalCost           float64 `json:"totalCost"`
 }
 
 func (e aiPurchaseExtraction) toRawDocumentExtraction(imagePath string) application.RawDocumentExtraction {
@@ -326,16 +489,12 @@ func (e aiPurchaseExtraction) toRawDocumentExtraction(imagePath string) applicat
 	}
 	items := make([]domain.PurchaseItem, 0, len(e.Items))
 	for i, item := range e.Items {
-		lineNumber := item.LineNumber
-		if lineNumber == 0 {
-			lineNumber = i + 1
-		}
 		packageQuantity := item.PackageQuantity
 		if packageQuantity == 0 {
 			packageQuantity = 1
 		}
 		items = append(items, domain.PurchaseItem{
-			LineNumber:          lineNumber,
+			LineNumber:          i + 1,
 			SupplierProductCode: strings.TrimSpace(item.SupplierProductCode),
 			Barcode:             strings.TrimSpace(item.Barcode),
 			Reference:           strings.TrimSpace(item.Reference),

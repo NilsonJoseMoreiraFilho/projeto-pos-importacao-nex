@@ -84,6 +84,55 @@ func TestOpenAIClientExtractsStructuredPurchase(t *testing.T) {
 	}
 }
 
+func TestExtractionLooksPartialForFewItemsWithHighTotal(t *testing.T) {
+	extracted := aiPurchaseExtraction{}
+	extracted.Totals.ProductsTotal = 4216.94
+	for i := 1; i <= 8; i++ {
+		extracted.Items = append(extracted.Items, aiPurchaseItemExtraction{LineNumber: i, TotalCost: 50})
+	}
+
+	if !extractionLooksPartial(extracted) {
+		t.Fatal("expected few items with high document total to look partial")
+	}
+}
+
+func TestExtractionLooksPartialForLargeLineNumberGap(t *testing.T) {
+	extracted := aiPurchaseExtraction{
+		Items: []aiPurchaseItemExtraction{
+			{LineNumber: 1, TotalCost: 10},
+			{LineNumber: 2, TotalCost: 10},
+			{LineNumber: 12, TotalCost: 10},
+		},
+	}
+
+	if !extractionLooksPartial(extracted) {
+		t.Fatal("expected line number gap to look partial")
+	}
+}
+
+func TestExtractionLooksPartialWhenModelWarnsAboutPartialTable(t *testing.T) {
+	extracted := aiPurchaseExtraction{Warnings: []string{"extracao parcial"}}
+	for i := 1; i <= 31; i++ {
+		extracted.Items = append(extracted.Items, aiPurchaseItemExtraction{LineNumber: i, TotalCost: 30})
+	}
+
+	if !extractionLooksPartial(extracted) {
+		t.Fatal("expected model partial warning to trigger retry")
+	}
+}
+
+func TestExtractionDoesNotLookPartialForLongTableWithTotalMismatch(t *testing.T) {
+	extracted := aiPurchaseExtraction{}
+	extracted.Totals.ProductsTotal = 4216.94
+	for i := 1; i <= 35; i++ {
+		extracted.Items = append(extracted.Items, aiPurchaseItemExtraction{LineNumber: i, TotalCost: 30})
+	}
+
+	if extractionLooksPartial(extracted) {
+		t.Fatal("expected long table to be treated as complete enough even when totals still need review")
+	}
+}
+
 func hasObservation(observations []string, term string) bool {
 	for _, observation := range observations {
 		if strings.Contains(observation, term) {
