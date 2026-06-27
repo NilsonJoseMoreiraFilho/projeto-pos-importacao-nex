@@ -22,7 +22,7 @@ func ValidatePurchase(source SourceDocument, purchase Purchase, requiresHumanRev
 	var results []ValidationResult
 
 	if source.PageCount > 0 && source.CurrentPage > 0 && source.CurrentPage < source.PageCount {
-		results = append(results, errorResult("DOCUMENT_INCOMPLETE", "sourceDocument.pageCount", "documento possui páginas faltantes"))
+		results = append(results, warningResult("DOCUMENT_INCOMPLETE", "sourceDocument.pageCount", "documento possui páginas faltantes"))
 	}
 	if purchase.Supplier.LegalName == "" && purchase.Supplier.DocumentNumber == "" {
 		results = append(results, errorResult("SUPPLIER_NOT_IDENTIFIED", "supplier", "fornecedor não identificado"))
@@ -45,13 +45,13 @@ func ValidatePurchase(source SourceDocument, purchase Purchase, requiresHumanRev
 		}
 		expectedTotal := NewMoneyFromFloat(item.Quantity * item.UnitCost.Float64())
 		if !item.TotalCost.WithinCents(expectedTotal, 1) {
-			results = append(results, errorResult("ITEM_TOTAL_MISMATCH", field+".totalCost", "total do item diverge de quantidade x valor unitário"))
+			results = append(results, warningResult("ITEM_TOTAL_MISMATCH", field+".totalCost", "total do item diverge de quantidade x valor unitário"))
 		}
 		sum = sum.Add(item.TotalCost)
 	}
 
 	if !purchase.Totals.ProductsTotal.WithinCents(sum, 1) {
-		results = append(results, errorResult("PRODUCTS_TOTAL_MISMATCH", "totals.productsTotal", "soma dos itens diverge do total de produtos"))
+		results = append(results, warningResult("PRODUCTS_TOTAL_MISMATCH", "totals.productsTotal", "soma dos itens diverge do total de produtos"))
 	}
 	expectedGrandTotal := purchase.Totals.ProductsTotal.
 		Add(purchase.Totals.Addition).
@@ -60,7 +60,7 @@ func ValidatePurchase(source SourceDocument, purchase Purchase, requiresHumanRev
 		Add(purchase.Totals.FCPST).
 		Sub(purchase.Totals.Discount)
 	if !purchase.Totals.GrandTotal.WithinCents(expectedGrandTotal, 1) {
-		results = append(results, errorResult("GRAND_TOTAL_MISMATCH", "totals.grandTotal", "total geral diverge dos totais calculados"))
+		results = append(results, warningResult("GRAND_TOTAL_MISMATCH", "totals.grandTotal", "total geral diverge dos totais calculados"))
 	}
 
 	return results
@@ -82,5 +82,15 @@ func errorResult(code, field, message string) ValidationResult {
 		Field:    field,
 		Message:  message,
 		Blocking: true,
+	}
+}
+
+func warningResult(code, field, message string) ValidationResult {
+	return ValidationResult{
+		Severity: ValidationWarning,
+		Code:     code,
+		Field:    field,
+		Message:  message,
+		Blocking: false,
 	}
 }
