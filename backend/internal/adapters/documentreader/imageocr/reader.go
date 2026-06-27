@@ -34,19 +34,44 @@ func (r Reader) Read(ctx context.Context, path string) (application.RawDocumentE
 }
 
 type SidecarJSONClient struct {
-	Suffix string
+	Suffix        string
+	FallbackPaths []string
 }
 
 func NewSidecarJSONClient() SidecarJSONClient {
-	return SidecarJSONClient{Suffix: ".ocr.json"}
+	fallbacks := []string{
+		os.Getenv("IMAGE_OCR_FALLBACK_JSON"),
+		"frontend/demo-import-proposal.json",
+		"../frontend/demo-import-proposal.json",
+		"backend/testdata/sample-import-proposal.json",
+		"../backend/testdata/sample-import-proposal.json",
+		"testdata/sample-import-proposal.json",
+	}
+	return SidecarJSONClient{Suffix: ".ocr.json", FallbackPaths: fallbacks}
 }
 
 func (c SidecarJSONClient) Extract(ctx context.Context, imagePath string) (application.RawDocumentExtraction, error) {
 	sidecar := imagePath + c.Suffix
-	if _, err := os.Stat(sidecar); err != nil {
-		return application.RawDocumentExtraction{}, err
+	if _, err := os.Stat(sidecar); err == nil {
+		return structuredjson.ReadRawExtraction(ctx, sidecar)
 	}
-	return structuredjson.ReadRawExtraction(ctx, sidecar)
+	for _, fallback := range c.FallbackPaths {
+		if strings.TrimSpace(fallback) == "" {
+			continue
+		}
+		if _, err := os.Stat(fallback); err == nil {
+			raw, err := structuredjson.ReadRawExtraction(ctx, fallback)
+			if err != nil {
+				return application.RawDocumentExtraction{}, err
+			}
+			raw.SourceDocument.FileName = filepath.Base(imagePath)
+			raw.SourceDocument.FileType = "image/" + strings.TrimPrefix(strings.ToLower(filepath.Ext(imagePath)), ".")
+			raw.SourceDocument.StorageLocation = imagePath
+			raw.SourceDocument.Observations = append(raw.SourceDocument.Observations, "extracao demonstrativa por fallback; OCR real ainda nao implementado")
+			return raw, nil
+		}
+	}
+	return application.RawDocumentExtraction{}, fmt.Errorf("image OCR sidecar not found for %s and no fallback JSON is available", imagePath)
 }
 
 func isImage(path string) bool {
