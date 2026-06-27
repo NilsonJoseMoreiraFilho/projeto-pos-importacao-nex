@@ -54,7 +54,10 @@ func (s *Server) routes(frontendDir string) {
 	})
 	if frontendDir != "" {
 		fileServer := http.FileServer(http.Dir(frontendDir))
-		s.mux.Handle("/", fileServer)
+		s.mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			fileServer.ServeHTTP(w, r)
+		}))
 	}
 }
 

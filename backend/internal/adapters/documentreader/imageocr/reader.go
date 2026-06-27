@@ -99,7 +99,7 @@ type OpenAIClient struct {
 func NewOpenAIClientFromEnv() OpenAIClient {
 	return OpenAIClient{
 		APIKey:   strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
-		Model:    envOrDefault("OPENAI_VISION_MODEL", "gpt-4o-mini"),
+		Model:    envOrDefault("OPENAI_VISION_MODEL", "gpt-4o"),
 		Endpoint: envOrDefault("OPENAI_RESPONSES_ENDPOINT", "https://api.openai.com/v1/responses"),
 		HTTPClient: &http.Client{
 			Timeout: 90 * time.Second,
@@ -121,7 +121,8 @@ func (c OpenAIClient) Extract(ctx context.Context, imagePath string) (applicatio
 	}
 	mimeType := mimeTypeForImage(imagePath)
 	requestBody := openAIResponsesRequest{
-		Model: c.Model,
+		Model:           c.Model,
+		MaxOutputTokens: 12000,
 		Input: []openAIInput{
 			{
 				Role: "system",
@@ -132,7 +133,7 @@ func (c OpenAIClient) Extract(ctx context.Context, imagePath string) (applicatio
 			{
 				Role: "user",
 				Content: []openAIContent{
-					{Type: "input_text", Text: "Extraia os dados deste pedido de compra/venda fotografado e responda apenas no JSON do schema."},
+					{Type: "input_text", Text: "Extraia os dados deste pedido de compra/venda fotografado. A tabela de itens costuma ter muitas linhas; percorra do primeiro item ate a linha anterior a Total Produtos e responda apenas no JSON do schema."},
 					{Type: "input_image", ImageURL: fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(image))},
 				},
 			},
@@ -180,7 +181,9 @@ func (c OpenAIClient) Extract(ctx context.Context, imagePath string) (applicatio
 	if err := json.Unmarshal([]byte(content), &extracted); err != nil {
 		return application.RawDocumentExtraction{}, fmt.Errorf("parse openai extraction JSON: %w: %s", err, content)
 	}
-	return extracted.toRawDocumentExtraction(imagePath), nil
+	raw := extracted.toRawDocumentExtraction(imagePath)
+	raw.SourceDocument.Observations[0] = fmt.Sprintf("extracao real por OpenAI Vision (%s)", c.Model)
+	return raw, nil
 }
 
 func isImage(path string) bool {
@@ -220,7 +223,11 @@ func extractionSystemPrompt() string {
 Responda exclusivamente com JSON valido no schema solicitado.
 Use strings vazias quando nao conseguir ler um campo.
 Use valores numericos em reais, nao em centavos.
-Preserve uma linha por item visivel.
+Preserve uma linha por item visivel na tabela.
+Leia a tabela linha a linha, da coluna Codigo ate Vl. Total.
+Nao pare depois das primeiras linhas: continue ate a linha imediatamente anterior a "Total Produtos".
+Se existirem linhas destacadas em amarelo, trate cada faixa amarela como uma linha candidata de item.
+O documento de exemplo costuma ter cerca de 30 a 40 linhas de itens; se voce retornar muito menos, inclua um warning explicando que a extracao foi parcial.
 Nao substitua produtos ilegíveis por produtos parecidos.
 Nao use conhecimento geral para completar descricao, codigo ou referencia.
 Se a tabela estiver ilegivel, retorne menos itens com warnings em vez de inventar linhas.
@@ -228,9 +235,10 @@ Nao invente produto interno NEX; esta sprint nao exige vinculo item a item com c
 }
 
 type openAIResponsesRequest struct {
-	Model string        `json:"model"`
-	Input []openAIInput `json:"input"`
-	Text  openAIText    `json:"text"`
+	Model           string        `json:"model"`
+	MaxOutputTokens int           `json:"max_output_tokens,omitempty"`
+	Input           []openAIInput `json:"input"`
+	Text            openAIText    `json:"text"`
 }
 
 type openAIInput struct {

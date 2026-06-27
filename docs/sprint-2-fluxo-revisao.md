@@ -96,7 +96,7 @@ Resposta: `ApprovedPurchase`.
 Para testar extracao real de foto por IA:
 
 1. Configurar `OPENAI_API_KEY` no ambiente do backend.
-2. Opcionalmente configurar `OPENAI_VISION_MODEL`; o padrao atual do projeto e `gpt-4o-mini`.
+2. Opcionalmente configurar `OPENAI_VISION_MODEL`; o padrao atual do projeto e `gpt-4o`, pois ele preserva melhor tabelas longas em fotos.
 3. Subir uma imagem usando `reader=imageocr`.
 
 Ordem de resolucao do `imageocr`:
